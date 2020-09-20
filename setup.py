@@ -1,6 +1,8 @@
 from pynauty import * #please figure out how to use this
 import numpy as np
 import random
+from scipy import linalg
+#from numpy.linalg import matrix_rank
 
 #convert adjacency dictionary (which is already the adj matrix in a hash table)
 # to a binary vector
@@ -121,8 +123,9 @@ def adj_dict_to_vector(graph): #graph is Graph object
         for contact in adj_dict[vtx]: #symmetric matrix
             adj_matrix[vtx][contact] = 1
             adj_matrix[contact][vtx] = 1
-    #return adj_matrix
-    return adj_matrix.flatten()
+    #print(adj_matrix)
+    return adj_matrix
+    #return adj_matrix.flatten()
 
 #convert adjacency matrix to system of equations (1)
 '''
@@ -130,12 +133,55 @@ def add_cluster(cluster): #i guess cluster will be a cluster object
     pass
 '''
 
+def rigidity_matrix(x, d, n):
+    # can iterate through adjacency matrix A and look for 1s (indicate contacts)
+    # check if this contact has already been accounted for b/c
+    # (adj matrix/vector is symmetric and thus redundant)
+    #returns R(x)
+    #shouldn't depend on the adjacency matrix
+    #kd tree
+    #tolerance for adjacency = 10^-3 or 10^-5
+    A = [[]] #NEED TO DEFINE THIS
+    R = []
+    for i in range(len(A)):
+        for j in range(i+1, len(A[0])): 
+            #i+1 to skip the diagonal (sphere can't contact itself so diagonal always 0)
+            if A[i][j] == 1:
+                #i is always less than j b/c we only iterate through upper triangle
+                new_row = []
+                prezeros = d*i
+                midzeros = d*(j-i-1)
+                postzeros = d*(len(A[0])-j-1)
+                iminj = [] #p_ik - p_jk
+                jmini = [] #-(p_ik-p_jk)
+
+                for coord_i, coord_j in zip(x[d*i:(d+1)*i], x[d*j:(d+1)*j]):
+                    iminj.append(coord_i - coord_j)
+                    jmini.append(coord_j - coord_i)
+
+                new_row += [0 for zero in range(prezeros)]
+                new_row += iminj
+                new_row += [0 for zero in range(midzeros)]
+                new_row += jmini
+                new_row += [0 for zero in range(postzeros)]
+                
+                print("new row is", len(new_row), "elements long")
+                #why is the length of new_row different each time??
+                #assert len(new_row) == n*d
+
+                R.append(new_row)
+    
+    R = constrain(R, d, n)
+    return R
+
 def constrain(matrix, d, n):
     '''
     Adds rows of constrained vertices to the end of the rigidity matrix, a 2d numpy array. 
     Should mutate input matrix. (helper function)
     Returns constrained matrix.
     '''
+    matrix = np.array(matrix)
+    print(matrix)
     #test d = 5, n = 10, generate numpy array
     s_j = [] #indices/vertices to constrain
     ind = 0
@@ -158,6 +204,63 @@ def constrain(matrix, d, n):
         matrix = np.append(matrix, [new_row], axis=0)
     #print("matrix to return:", matrix)
     return matrix
+
+def sign_def(matrix): #returns bool
+    '''
+    Returns True if input matrix is positive or negative sign definite; False otherwise.
+    '''
+    eigs = linalg.eigvals(matrix)
+    #what to do if the eigenvalues are complex??
+    if eigs[0] > 0: #test for positive
+        for eig in eigs:
+            if eig <= 0:
+                return False
+    elif eigs[0] < 0: #test negative sign definite
+        for eig in eigs:
+            if eig >= 0:
+                return False
+    else: #first term 0
+        return False
+    return True
+
+#trying the rigidity test here??
+def is_rigid(R, d, n): #R is rigidity matrix (should be 2d numpy array)
+    '''
+    Returns 1 if cluster if 1st order rigid, 2 if it is pre-stress stable.
+    Returns 0 (maybe) if the cluster is not rigid.
+    '''
+    #TEST FIRST ORDER RIGIDITY
+    # if right null space V, dim = n_v = 0 --> return 1 (for 1st order rigid)
+    right_null = linalg.null_space(R) #V, gives orthonormal basis
+    n_v = right_null.shape[1]
+    if n_v == 0: #(N,K) array where K = dimension of effective null space
+        print("First-order rigid")
+        return 1
+
+    #TEST PRE-STRESS STABILITY
+    left_null = linalg.null_space(R.T)#W
+    n_w = left_null.shape[1]
+    if n_w == 0:
+        print("Not rigid")
+        return 0 #???
+    else: 
+        for m in range(n_w): #iterate from 1 to n_w
+            b = [0 for zero in range(n_v)] #b has size n_v
+            b[m] = 1 #b_m = e_m
+            #now make Q and do b*Q
+            Q_m = [] #dimension n_v x n_v
+            for i in range(n_v):
+                new_row = []
+                for j in range(n_v):
+                    wR = np.matmul(left_null[m].T, rigidity_matrix(right_null[i], d, n))
+                    # does it need to be the transpose of right_null[i]?????????
+                    new_row.append(np.matmul(wR, right_null[j]))
+                Q_m.append(new_row)
+            if sign_def(Q_m):
+                print("Pre-stres stable")
+                return 2
+    print("Unable to determine rigidity")
+    return 0 #????
 
 if __name__ == '__main__':
     '''
@@ -184,9 +287,26 @@ if __name__ == '__main__':
 
     #test cluster class
     print("\n\nTESTING ADJACENCY STRUCTURES\n")
-    adjv = adj_dict_to_vector(g)
-    print(adjv)
+    #adjv = adj_dict_to_vector(g)
+    #print(adjv)
 
+    test_d = 3
+    test_n =6
+    test_m = 12
+
+    adjm = adj_dict_to_vector(g)
+    print(adjm)
+
+    #define some coordinates
+
+    test_A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
+
+    test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
+    print("test_x:",test_x)
+    Rx = rigidity_matrix(test_x, test_d, test_n)
+    print(Rx)
+
+    '''
     clustree = bst()
     cluster1 = cluster(adjv)
     clustree.insert(cluster1)
@@ -198,12 +318,10 @@ if __name__ == '__main__':
     clus1 = cluster(arr1)
     clus2 = cluster(arr2)
     print(clus1<clus2)
+    '''
 
     #test rigidity setup
     print("\n\nTESTING SETUP FOR RIGIDITY\n")
-    test_d = 5
-    test_n = 10
-    test_m = 4
 
     r = []
     for contact in range(test_m):
