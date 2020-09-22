@@ -133,7 +133,7 @@ def add_cluster(cluster): #i guess cluster will be a cluster object
     pass
 '''
 
-def rigidity_matrix(x, d, n):
+def rigidity_matrix(A, x, d, n):
     # can iterate through adjacency matrix A and look for 1s (indicate contacts)
     # check if this contact has already been accounted for b/c
     # (adj matrix/vector is symmetric and thus redundant)
@@ -141,10 +141,13 @@ def rigidity_matrix(x, d, n):
     #shouldn't depend on the adjacency matrix
     #kd tree
     #tolerance for adjacency = 10^-3 or 10^-5
-    A = [[]] #NEED TO DEFINE THIS
+    #A = [[]] #NEED TO DEFINE THIS
     R = []
+    print("\n")
     for i in range(len(A)):
+        print("i =",i)
         for j in range(i+1, len(A[0])): 
+            print("\nj =",j)
             #i+1 to skip the diagonal (sphere can't contact itself so diagonal always 0)
             if A[i][j] == 1:
                 #i is always less than j b/c we only iterate through upper triangle
@@ -154,10 +157,16 @@ def rigidity_matrix(x, d, n):
                 postzeros = d*(len(A[0])-j-1)
                 iminj = [] #p_ik - p_jk
                 jmini = [] #-(p_ik-p_jk)
-
-                for coord_i, coord_j in zip(x[d*i:(d+1)*i], x[d*j:(d+1)*j]):
+                print("d*i =",d*i,"\t(d+1)*i =",d*i+d)
+                print("d*j =",d*j,"\t(d+1)*j =",d*j+d)
+                print("coordinates of i:", x[d*i:d*i+d])
+                print("coordinates of j:", x[d*j:d*j+d])
+                for coord_i, coord_j in zip(x[d*i:d*i+d], x[d*j:d*j+d]):
                     iminj.append(coord_i - coord_j)
                     jmini.append(coord_j - coord_i)
+
+                print("iminj =", iminj)
+                print("jmini =", jmini)
 
                 new_row += [0 for zero in range(prezeros)]
                 new_row += iminj
@@ -181,7 +190,7 @@ def constrain(matrix, d, n):
     Returns constrained matrix.
     '''
     matrix = np.array(matrix)
-    print(matrix)
+    #print(matrix)
     #test d = 5, n = 10, generate numpy array
     s_j = [] #indices/vertices to constrain
     ind = 0
@@ -303,9 +312,9 @@ if __name__ == '__main__':
 
     test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
     print("test_x:",test_x)
-    Rx = rigidity_matrix(test_x, test_d, test_n)
+    Rx = rigidity_matrix(test_A, test_x, test_d, test_n)
     print(Rx)
-
+    print(is_rigid(Rx, test_d, test_n))
     '''
     clustree = bst()
     cluster1 = cluster(adjv)
@@ -329,4 +338,5 @@ if __name__ == '__main__':
     test_r = np.array(r) #should be np 2d array
     test_r = constrain(test_r, test_d, test_n)
     print(test_r)
+    print(is_rigid(test_r, test_d, test_n))
         
