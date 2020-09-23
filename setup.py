@@ -4,6 +4,9 @@ import random
 from scipy import linalg
 #from numpy.linalg import matrix_rank
 
+# GLOBAL VARIABLES
+ADJACENCY_TOL = 10**-5
+
 #convert adjacency dictionary (which is already the adj matrix in a hash table)
 # to a binary vector
 
@@ -133,15 +136,35 @@ def add_cluster(cluster): #i guess cluster will be a cluster object
     pass
 '''
 
-def rigidity_matrix(A, x, d, n):
+def rigidity_matrix(x, d, n):
     # can iterate through adjacency matrix A and look for 1s (indicate contacts)
-    # check if this contact has already been accounted for b/c
-    # (adj matrix/vector is symmetric and thus redundant)
-    #returns R(x)
-    #shouldn't depend on the adjacency matrix
+    # shouldn't depend on the adjacency matrix ********************
     #kd tree
     #tolerance for adjacency = 10^-3 or 10^-5
     #A = [[]] #NEED TO DEFINE THIS
+
+    # CREATE ADJACENCY MATRIX FROM VECTOR X
+    A = []
+
+    for i in range(n):
+        new_row = []
+        for j in range(n):
+            norm = 0
+            for k in range(d):
+                norm += (x[d*i+k] - x[d*j+k])**2
+            #print("norm =", norm)
+            if i!=j and norm - 1 <= ADJACENCY_TOL: #otherwise it will think each sphere contacts itself
+                new_row.append(1)
+            else:
+                new_row.append(0)
+        print("new row =", new_row)
+        A.append(new_row)
+    
+    #assert len(A) == n
+    #assert len(A[0]) == n
+    #why is it returning an identity matrix???
+    print(A)
+
     R = []
     print("\n")
     for i in range(len(A)):
@@ -310,9 +333,13 @@ if __name__ == '__main__':
 
     test_A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
 
-    test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
+    #test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
+    test_x = [0.0000000000000000,0.0000000000000000,0.0000000000000000,0.5555555555555556, \
+        1.2830005981991683,0.9072184232530289,1.0000000000000000,-0.0000000000000000,-0.0000000000000000, \
+        1.3333333333333333,0.7698003589195010,0.5443310539518174,0.5000000000000000,0.8660254037844386, \
+        -0.0000000000000000,0.5000000000000000,0.2886751345948129,0.8164965809277260]
     print("test_x:",test_x)
-    Rx = rigidity_matrix(test_A, test_x, test_d, test_n)
+    Rx = rigidity_matrix(test_x, test_d, test_n)
     print(Rx)
     print(is_rigid(Rx, test_d, test_n))
     '''
