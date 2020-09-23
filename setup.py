@@ -130,7 +130,6 @@ def adj_dict_to_vector(graph): #graph is Graph object
     return adj_matrix
     #return adj_matrix.flatten()
 
-#convert adjacency matrix to system of equations (1)
 '''
 def add_cluster(cluster): #i guess cluster will be a cluster object
     pass
@@ -264,10 +263,14 @@ def is_rigid(R, d, n): #R is rigidity matrix (should be 2d numpy array)
     #TEST FIRST ORDER RIGIDITY
     # if right null space V, dim = n_v = 0 --> return 1 (for 1st order rigid)
     right_null = linalg.null_space(R) #V, gives orthonormal basis
+    print("basis of right null space:", right_null)
     n_v = right_null.shape[1]
+    print("dim(right null space) =", n_v)
+    
     if n_v == 0: #(N,K) array where K = dimension of effective null space
         print("First-order rigid")
         return 1
+    
 
     #TEST PRE-STRESS STABILITY
     left_null = linalg.null_space(R.T)#W
@@ -289,7 +292,7 @@ def is_rigid(R, d, n): #R is rigidity matrix (should be 2d numpy array)
                     new_row.append(np.matmul(wR, right_null[j]))
                 Q_m.append(new_row)
             if sign_def(Q_m):
-                print("Pre-stres stable")
+                print("Pre-stress stable")
                 return 2
     print("Unable to determine rigidity")
     return 0 #????
@@ -309,7 +312,7 @@ if __name__ == '__main__':
     '''
 
     #test pynauty
-    print("TESTING PYNAUTY\n")
+    print("\nTESTING PYNAUTY\n")
     g = Graph(6, False, {0:[1,4],1:[2,4],2:[3],3:[4,5]})
     print(g.adjacency_dict)
     aut = autgrp(g)
@@ -318,7 +321,7 @@ if __name__ == '__main__':
     print(relabel)
 
     #test cluster class
-    print("\n\nTESTING ADJACENCY STRUCTURES\n")
+    print("\n\nTESTING ADJACENCY MATRIX SETUP\n")
     #adjv = adj_dict_to_vector(g)
     #print(adjv)
 
@@ -329,19 +332,31 @@ if __name__ == '__main__':
     adjm = adj_dict_to_vector(g)
     print(adjm)
 
-    #define some coordinates
-
-    test_A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
+    #test_A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
 
     #test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
-    test_x = [0.0000000000000000,0.0000000000000000,0.0000000000000000,0.5555555555555556, \
-        1.2830005981991683,0.9072184232530289,1.0000000000000000,-0.0000000000000000,-0.0000000000000000, \
-        1.3333333333333333,0.7698003589195010,0.5443310539518174,0.5000000000000000,0.8660254037844386, \
-        -0.0000000000000000,0.5000000000000000,0.2886751345948129,0.8164965809277260]
-    print("test_x:",test_x)
+    #test_x = [0.0000000000000000,0.0000000000000000,0.0000000000000000,0.5555555555555556, \
+        #1.2830005981991683,0.9072184232530289,1.0000000000000000,-0.0000000000000000,-0.0000000000000000, \
+        #1.3333333333333333,0.7698003589195010,0.5443310539518174,0.5000000000000000,0.8660254037844386, \
+        #-0.0000000000000000,0.5000000000000000,0.2886751345948129,0.8164965809277260]
+    test_x = [0.0000000000000000,   0.0000000000000000,   0.0000000000000000,   1.0000000000000000, \
+          0.0000000000000000,   0.0000000000000000,   0.5000000000000000,   0.8660254037844386,  \
+               0.0000000000000000,   0.5000000000000000,  -0.2886751345948129,  -0.8164965809277260, \
+                    -0.0000000000000000,   0.5773502691896257,  -0.8164965809277260,   1.0000000000000000,\
+                           0.5773502691896257,  -0.8164965809277260 ]
+    #print("test_x:",test_x)
     Rx = rigidity_matrix(test_x, test_d, test_n)
     print(Rx)
+
+    print("\n\nTESTING FOR RIGIDITY\n")
     print(is_rigid(Rx, test_d, test_n))
+
+    # test if sign_def() works: it does work
+    pos_eigs = np.array([[2,-1,0],[-1,2,-1],[0,-1,2]])
+    not_def = np.array([[9,0,-8],[6,-5,-2],[-9,3,3]])
+    print("should be T for positive definite:", sign_def(pos_eigs))
+    print("should be F for this one:", sign_def(not_def))
+
     '''
     clustree = bst()
     cluster1 = cluster(adjv)
@@ -357,8 +372,8 @@ if __name__ == '__main__':
     '''
 
     #test rigidity setup
+    '''
     print("\n\nTESTING SETUP FOR RIGIDITY\n")
-
     r = []
     for contact in range(test_m):
         r.append([random.randint(1,10) for coord in range(test_d*test_n)])
@@ -366,4 +381,5 @@ if __name__ == '__main__':
     test_r = constrain(test_r, test_d, test_n)
     print(test_r)
     print(is_rigid(test_r, test_d, test_n))
+    '''
         
