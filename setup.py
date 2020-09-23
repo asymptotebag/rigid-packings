@@ -1,3 +1,4 @@
+import os
 from pynauty import * #please figure out how to use this
 import numpy as np
 import random
@@ -179,10 +180,10 @@ def rigidity_matrix(x, d, n):
                 postzeros = d*(len(A[0])-j-1)
                 iminj = [] #p_ik - p_jk
                 jmini = [] #-(p_ik-p_jk)
-                print("d*i =",d*i,"\t(d+1)*i =",d*i+d)
-                print("d*j =",d*j,"\t(d+1)*j =",d*j+d)
-                print("coordinates of i:", x[d*i:d*i+d])
-                print("coordinates of j:", x[d*j:d*j+d])
+                
+                #print("d*i =",d*i,"\t(d+1)*i =",d*i+d)
+                #print("d*j =",d*j,"\t(d+1)*j =",d*j+d)
+                
                 for coord_i, coord_j in zip(x[d*i:d*i+d], x[d*j:d*j+d]):
                     iminj.append(coord_i - coord_j)
                     jmini.append(coord_j - coord_i)
@@ -196,9 +197,8 @@ def rigidity_matrix(x, d, n):
                 new_row += jmini
                 new_row += [0 for zero in range(postzeros)]
                 
-                print("new row is", len(new_row), "elements long")
-                #why is the length of new_row different each time??
-                #assert len(new_row) == n*d
+                #print("new row is", len(new_row), "elements long")
+                assert len(new_row) == n*d
 
                 R.append(new_row)
     
@@ -212,8 +212,7 @@ def constrain(matrix, d, n):
     Returns constrained matrix.
     '''
     matrix = np.array(matrix)
-    #print(matrix)
-    #test d = 5, n = 10, generate numpy array
+
     s_j = [] #indices/vertices to constrain
     ind = 0
     for sphere in range(d):
@@ -297,6 +296,20 @@ def is_rigid(R, d, n): #R is rigidity matrix (should be 2d numpy array)
     print("Unable to determine rigidity")
     return 0 #????
 
+def parse_coords(n): #returns list of lists (of coordinates)
+    #f (file) is one long string \n for new clusters
+    filename = 'test-coords/n' + str(n) + '.txt'
+    #filename = os.path.join('test-coords/n', str(n), '.txt')
+    f = open(filename, 'r')
+    clusters = []
+    for line in f: #each line represents one cluster
+        this_cluster = []
+        for coord in line.split(): #these are all strings
+            this_cluster.append(float(coord))
+        clusters.append(this_cluster)
+    f.close()
+    return clusters
+        
 if __name__ == '__main__':
     '''
     test_tree = bst()
@@ -311,6 +324,7 @@ if __name__ == '__main__':
     print(test_tree.inorder())
     '''
 
+    '''
     #test pynauty
     print("\nTESTING PYNAUTY\n")
     g = Graph(6, False, {0:[1,4],1:[2,4],2:[3],3:[4,5]})
@@ -331,6 +345,7 @@ if __name__ == '__main__':
 
     adjm = adj_dict_to_vector(g)
     print(adjm)
+    '''
 
     #test_A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
 
@@ -339,23 +354,34 @@ if __name__ == '__main__':
         #1.2830005981991683,0.9072184232530289,1.0000000000000000,-0.0000000000000000,-0.0000000000000000, \
         #1.3333333333333333,0.7698003589195010,0.5443310539518174,0.5000000000000000,0.8660254037844386, \
         #-0.0000000000000000,0.5000000000000000,0.2886751345948129,0.8164965809277260]
-    test_x = [0.0000000000000000,   0.0000000000000000,   0.0000000000000000,   1.0000000000000000, \
-          0.0000000000000000,   0.0000000000000000,   0.5000000000000000,   0.8660254037844386,  \
-               0.0000000000000000,   0.5000000000000000,  -0.2886751345948129,  -0.8164965809277260, \
-                    -0.0000000000000000,   0.5773502691896257,  -0.8164965809277260,   1.0000000000000000,\
-                           0.5773502691896257,  -0.8164965809277260 ]
+    
     #print("test_x:",test_x)
-    Rx = rigidity_matrix(test_x, test_d, test_n)
-    print(Rx)
+    #Rx = rigidity_matrix(test_x, test_d, test_n)
+    #print(Rx)
 
     print("\n\nTESTING FOR RIGIDITY\n")
-    print(is_rigid(Rx, test_d, test_n))
+    #print(is_rigid(Rx, test_d, test_n))
 
     # test if sign_def() works: it does work
     pos_eigs = np.array([[2,-1,0],[-1,2,-1],[0,-1,2]])
     not_def = np.array([[9,0,-8],[6,-5,-2],[-9,3,3]])
     print("should be T for positive definite:", sign_def(pos_eigs))
     print("should be F for this one:", sign_def(not_def))
+
+    print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
+
+    '''
+    for n in range(6,11):
+        print("\nTesting n =", n)
+        clusters = parse_coords(n)
+        for cluster in clusters: #cluster is x
+            assert len(cluster) == 3*n
+            print("cluster:", cluster)
+            R = rigidity_matrix(cluster, 3, n)
+            print(R)
+            print(is_rigid(R,3,n))
+            print("\n")
+    '''
 
     '''
     clustree = bst()
