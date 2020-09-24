@@ -136,41 +136,42 @@ def add_cluster(cluster): #i guess cluster will be a cluster object
     pass
 '''
 
-def rigidity_matrix(x, d, n):
+def rigidity_matrix(x, d, n, A = [], returnA = True):
     # can iterate through adjacency matrix A and look for 1s (indicate contacts)
     # shouldn't depend on the adjacency matrix ********************
     #kd tree
     #tolerance for adjacency = 10^-3 or 10^-5
-    #A = [[]] #NEED TO DEFINE THIS
-
+    
     # CREATE ADJACENCY MATRIX FROM VECTOR X
-    A = []
-
-    for i in range(n):
-        new_row = []
-        for j in range(n):
-            norm = 0
-            for k in range(d):
-                norm += (x[d*i+k] - x[d*j+k])**2
-            #print("norm =", norm)
-            if i!=j and norm - 1 <= ADJACENCY_TOL: #otherwise it will think each sphere contacts itself
-                new_row.append(1)
-            else:
-                new_row.append(0)
-        print("new row =", new_row)
-        A.append(new_row)
+    #print("len(A) =", len(A))
+    if returnA: #if you want to return A, make the adjacency matrix
+        #print("x =", x)
+        A = []
+        for i in range(n):
+            new_row = []
+            for j in range(n):
+                norm = 0
+                for k in range(d):
+                    norm += (x[d*i+k] - x[d*j+k])**2
+                #print("norm =", norm)
+                if i!=j and norm - 1 <= ADJACENCY_TOL: #otherwise it will think each sphere contacts itself
+                    new_row.append(1)
+                else:
+                    new_row.append(0)
+            print("new row =", new_row)
+            A.append(new_row)
     
     #assert len(A) == n
     #assert len(A[0]) == n
     #why is it returning an identity matrix???
-    print(A)
+    #print(A)
 
     R = []
     print("\n")
     for i in range(len(A)):
-        print("i =",i)
+        #print("i =",i)
         for j in range(i+1, len(A[0])): 
-            print("\nj =",j)
+            #print("\nj =",j)
             #i+1 to skip the diagonal (sphere can't contact itself so diagonal always 0)
             if A[i][j] == 1:
                 #i is always less than j b/c we only iterate through upper triangle
@@ -188,8 +189,8 @@ def rigidity_matrix(x, d, n):
                     iminj.append(coord_i - coord_j)
                     jmini.append(coord_j - coord_i)
 
-                print("iminj =", iminj)
-                print("jmini =", jmini)
+                #print("iminj =", iminj)
+                #print("jmini =", jmini)
 
                 new_row += [0 for zero in range(prezeros)]
                 new_row += iminj
@@ -203,7 +204,12 @@ def rigidity_matrix(x, d, n):
                 R.append(new_row)
     
     R = constrain(R, d, n)
-    return R
+    #print(R)
+    print("Returning A?:", returnA)
+    if returnA:
+        return (R, A) #rigidity and adjacency
+    else:
+        return R
 
 def constrain(matrix, d, n):
     '''
@@ -254,13 +260,20 @@ def sign_def(matrix): #returns bool
     return True
 
 #trying the rigidity test here??
-def is_rigid(R, d, n): #R is rigidity matrix (should be 2d numpy array)
+def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     '''
     Returns 1 if cluster if 1st order rigid, 2 if it is pre-stress stable.
     Returns 0 (maybe) if the cluster is not rigid.
     '''
+    print("\nTUPLE UNPACKING\n")
+    print("RA is " + str(len(RA)) + " elements long.")
+    R, A = RA
+    print(R)
+    print(A)
+
     #TEST FIRST ORDER RIGIDITY
     # if right null space V, dim = n_v = 0 --> return 1 (for 1st order rigid)
+    print("dimension of R:", R.shape[0], "x", R.shape[1])
     right_null = linalg.null_space(R) #V, gives orthonormal basis
     print("basis of right null space:", right_null)
     n_v = right_null.shape[1]
@@ -272,8 +285,11 @@ def is_rigid(R, d, n): #R is rigidity matrix (should be 2d numpy array)
     
 
     #TEST PRE-STRESS STABILITY
-    left_null = linalg.null_space(R.T)#W
+    transpose = R.T
+    left_null = linalg.null_space(transpose)#W
     n_w = left_null.shape[1]
+    print("\nbasis of left null space:", left_null)
+    print("dim(left null space) =", n_w)
     if n_w == 0:
         print("Not rigid")
         return 0 #???
@@ -282,13 +298,18 @@ def is_rigid(R, d, n): #R is rigidity matrix (should be 2d numpy array)
             b = [0 for zero in range(n_v)] #b has size n_v
             b[m] = 1 #b_m = e_m
             #now make Q and do b*Q
+            print("b =", b)
             Q_m = [] #dimension n_v x n_v
             for i in range(n_v):
                 new_row = []
                 for j in range(n_v):
-                    wR = np.matmul(left_null[m].T, rigidity_matrix(right_null[i], d, n))
+                    print("left_null.T[m] =", left_null.T[m])
+                    print("dimension of left_null.T[m]:", left_null.T[m].shape)
+                    Rv = rigidity_matrix(right_null.T[i], d, n, A, False)
+                    print("dimension of Rv:", Rv.shape)
+                    wR = np.matmul(left_null.T[m], Rv)
                     # does it need to be the transpose of right_null[i]?????????
-                    new_row.append(np.matmul(wR, right_null[j]))
+                    new_row.append(np.matmul(wR, right_null.T[j]))
                 Q_m.append(new_row)
             if sign_def(Q_m):
                 print("Pre-stress stable")
@@ -368,20 +389,27 @@ if __name__ == '__main__':
     print("should be T for positive definite:", sign_def(pos_eigs))
     print("should be F for this one:", sign_def(not_def))
 
-    print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
-
     '''
-    for n in range(6,11):
+    x = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
+    print("cluster:", x)
+    R = rigidity_matrix(x, 3, 8)
+    #print(R)
+    print(is_rigid(R,3,8))
+
+    print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
+    '''
+
+    for n in range(8,10):
         print("\nTesting n =", n)
         clusters = parse_coords(n)
         for cluster in clusters: #cluster is x
             assert len(cluster) == 3*n
             print("cluster:", cluster)
             R = rigidity_matrix(cluster, 3, n)
-            print(R)
+            #print(R)
             print(is_rigid(R,3,n))
             print("\n")
-    '''
+
 
     '''
     clustree = bst()
