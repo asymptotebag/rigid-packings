@@ -395,23 +395,33 @@ if __name__ == '__main__':
     R = rigidity_matrix(x, 3, 8)
     #print(R)
     print(is_rigid(R,3,8))
+    '''
 
     print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
-    '''
     
+    d = 3
     first_rigid = [] #first order rigid (1)
     pre_stress = [] #pre stress stable (2)
     not_rigid = [] #(0)
-    idk = [] #can't be determined (-1)
-    for n in range(10,11):
+    idk = [] #can't be determined (-1)]
+    hypostatic = [] # contacts < 3n-6
+    hypo_stress = [] #hypostatic & pre-stress (should be all of them?)
+    hypo_rigid = -2
+    for n in range(6,11):
         print("\nTesting n =", n)
         clusters = parse_coords(n)
         for cluster in clusters: #cluster is x
-            assert len(cluster) == 3*n
-            print("cluster:", cluster)
-            R = rigidity_matrix(cluster, 3, n)
+            assert len(cluster) == d*n
+            #print("cluster:", cluster)
+            R = rigidity_matrix(cluster, d, n)
+            contacts = 0
+            for i in range(len(R[1])):
+                for j in range(i+1, len(R[1][0])):
+                    if R[1][i][j] == 1:
+                        contacts += 1
+            
             #print(R)
-            rigid = is_rigid(R,3,n) #0, 1, or 2
+            rigid = is_rigid(R,d,n) #0, 1, or 2
             if rigid == 1:
                 first_rigid.append(cluster)
             elif rigid == 2:
@@ -420,13 +430,22 @@ if __name__ == '__main__':
                 not_rigid.append(cluster)
             elif rigid == -1:
                 idk.append(cluster)
+            if contacts < d*n - 6:
+                hypostatic.append(cluster)
+                hypo_rigid = rigid
             #assert rigid != 0 # these all should be rigid
             print("\n")
 
+    print("For all clusters n=6 through 10:")
     print("# of first-order rigid clusters:", len(first_rigid))
     print("# of pre-stress stable clusters:", len(pre_stress))
     print("# of non-rigid clusters:", len(not_rigid))
     print("# of undetermined clusters:", len(idk))
+
+    print("\nFor hypostatic clusters:")
+    print("# of hypostatic clusters:", len(hypostatic))
+    print("# of pre-stress stable hypostatics:", len(hypo_stress))
+    print("hypostatic cluster has rigidity value", hypo_rigid)
 
     print("\nTest a non-rigid cluster!")
     cube = [0.0,0.0,0.0, 0.0,0.0,1.0, 0.0,1.0,1.0, 0.0,1.0,0.0, 1.0,0.0,1.0, 1.0,1.0,1.0, 1.0,0.0,0.0, 1.0,1.0,0.0]
@@ -434,6 +453,18 @@ if __name__ == '__main__':
     #print(R_cube)
     rigid_cube = is_rigid(R_cube,3,8)
     print(rigid_cube)
+    
+
+    '''
+    A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
+    contacts = 0
+    for i in range(len(A)):
+        for j in range(i+1, len(A[0])):
+            if A[i][j] == 1:
+                contacts += 1
+    print("contacts:", contacts)
+    '''
+
     '''
     clustree = bst()
     cluster1 = cluster(adjv)
