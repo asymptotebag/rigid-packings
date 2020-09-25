@@ -158,7 +158,7 @@ def rigidity_matrix(x, d, n, A = [], returnA = True):
                     new_row.append(1)
                 else:
                     new_row.append(0)
-            print("new row =", new_row)
+            #print("new row =", new_row)
             A.append(new_row)
     
     #assert len(A) == n
@@ -167,7 +167,7 @@ def rigidity_matrix(x, d, n, A = [], returnA = True):
     #print(A)
 
     R = []
-    print("\n")
+    #print("\n")
     for i in range(len(A)):
         #print("i =",i)
         for j in range(i+1, len(A[0])): 
@@ -205,7 +205,7 @@ def rigidity_matrix(x, d, n, A = [], returnA = True):
     
     R = constrain(R, d, n)
     #print(R)
-    print("Returning A?:", returnA)
+    #print("Returning A?:", returnA)
     if returnA:
         return (R, A) #rigidity and adjacency
     else:
@@ -226,7 +226,7 @@ def constrain(matrix, d, n):
         s_j += list(range(ind, d*(sphere+1)))
         ind = d*(sphere+1)
     
-    print("constrained vertices:", s_j) #should be 1,2,3,4,5,7,8,9,10,13,14,15,19,20,25
+    #print("constrained vertices:", s_j) #should be 1,2,3,4,5,7,8,9,10,13,14,15,19,20,25
 
     for coord in s_j:
         new_row = [] #will be added to rigidity matrix
@@ -265,19 +265,19 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     Returns 1 if cluster if 1st order rigid, 2 if it is pre-stress stable.
     Returns 0 (maybe) if the cluster is not rigid.
     '''
-    print("\nTUPLE UNPACKING\n")
-    print("RA is " + str(len(RA)) + " elements long.")
+    #print("\nTUPLE UNPACKING\n")
+    #print("RA is " + str(len(RA)) + " elements long.")
     R, A = RA
-    print(R)
-    print(A)
+    #print(R)
+    #print(A)
 
     #TEST FIRST ORDER RIGIDITY
     # if right null space V, dim = n_v = 0 --> return 1 (for 1st order rigid)
-    print("dimension of R:", R.shape[0], "x", R.shape[1])
+    #print("dimension of R:", R.shape[0], "x", R.shape[1])
     right_null = linalg.null_space(R) #V, gives orthonormal basis
-    print("basis of right null space:", right_null)
+    #print("basis of right null space:", right_null)
     n_v = right_null.shape[1]
-    print("dim(right null space) =", n_v)
+    #print("dim(right null space) =", n_v)
     
     if n_v == 0: #(N,K) array where K = dimension of effective null space
         print("First-order rigid")
@@ -288,8 +288,8 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     transpose = R.T
     left_null = linalg.null_space(transpose)#W
     n_w = left_null.shape[1]
-    print("\nbasis of left null space:", left_null)
-    print("dim(left null space) =", n_w)
+    #print("\nbasis of left null space:", left_null)
+    #print("dim(left null space) =", n_w)
     if n_w == 0:
         print("Not rigid")
         return 0 #???
@@ -298,15 +298,15 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
             b = [0 for zero in range(n_v)] #b has size n_v
             b[m] = 1 #b_m = e_m
             #now make Q and do b*Q
-            print("b =", b)
+            #print("b =", b)
             Q_m = [] #dimension n_v x n_v
             for i in range(n_v):
                 new_row = []
                 for j in range(n_v):
-                    print("left_null.T[m] =", left_null.T[m])
-                    print("dimension of left_null.T[m]:", left_null.T[m].shape)
+                    #print("left_null.T[m] =", left_null.T[m])
+                    #print("dimension of left_null.T[m]:", left_null.T[m].shape)
                     Rv = rigidity_matrix(right_null.T[i], d, n, A, False)
-                    print("dimension of Rv:", Rv.shape)
+                    #print("dimension of Rv:", Rv.shape)
                     wR = np.matmul(left_null.T[m], Rv)
                     # does it need to be the transpose of right_null[i]?????????
                     new_row.append(np.matmul(wR, right_null.T[j]))
@@ -315,7 +315,7 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
                 print("Pre-stress stable")
                 return 2
     print("Unable to determine rigidity")
-    return 0 #????
+    return -1 #????
 
 def parse_coords(n): #returns list of lists (of coordinates)
     #f (file) is one long string \n for new clusters
@@ -398,8 +398,12 @@ if __name__ == '__main__':
 
     print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
     '''
-
-    for n in range(8,10):
+    
+    first_rigid = [] #first order rigid (1)
+    pre_stress = [] #pre stress stable (2)
+    not_rigid = [] #(0)
+    idk = [] #can't be determined (-1)
+    for n in range(10,11):
         print("\nTesting n =", n)
         clusters = parse_coords(n)
         for cluster in clusters: #cluster is x
@@ -407,10 +411,29 @@ if __name__ == '__main__':
             print("cluster:", cluster)
             R = rigidity_matrix(cluster, 3, n)
             #print(R)
-            print(is_rigid(R,3,n))
+            rigid = is_rigid(R,3,n) #0, 1, or 2
+            if rigid == 1:
+                first_rigid.append(cluster)
+            elif rigid == 2:
+                pre_stress.append(cluster)
+            elif rigid == 0:
+                not_rigid.append(cluster)
+            elif rigid == -1:
+                idk.append(cluster)
+            #assert rigid != 0 # these all should be rigid
             print("\n")
 
+    print("# of first-order rigid clusters:", len(first_rigid))
+    print("# of pre-stress stable clusters:", len(pre_stress))
+    print("# of non-rigid clusters:", len(not_rigid))
+    print("# of undetermined clusters:", len(idk))
 
+    print("\nTest a non-rigid cluster!")
+    cube = [0.0,0.0,0.0, 0.0,0.0,1.0, 0.0,1.0,1.0, 0.0,1.0,0.0, 1.0,0.0,1.0, 1.0,1.0,1.0, 1.0,0.0,0.0, 1.0,1.0,0.0]
+    R_cube = rigidity_matrix(cube, 3, 8)
+    #print(R_cube)
+    rigid_cube = is_rigid(R_cube,3,8)
+    print(rigid_cube)
     '''
     clustree = bst()
     cluster1 = cluster(adjv)
@@ -425,7 +448,6 @@ if __name__ == '__main__':
     print(clus1<clus2)
     '''
 
-    #test rigidity setup
     '''
     print("\n\nTESTING SETUP FOR RIGIDITY\n")
     r = []
@@ -436,4 +458,3 @@ if __name__ == '__main__':
     print(test_r)
     print(is_rigid(test_r, test_d, test_n))
     '''
-        
