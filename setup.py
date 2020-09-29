@@ -3,6 +3,7 @@ from pynauty import * #please figure out how to use this
 import numpy as np
 import random
 from scipy import linalg
+import math
 #from numpy.linalg import matrix_rank
 
 # GLOBAL VARIABLES
@@ -338,75 +339,11 @@ def parse_coords(n): #returns list of lists (of coordinates)
         clusters.append(this_cluster)
     f.close()
     return clusters
-        
-if __name__ == '__main__':
-    '''
-    test_tree = bst()
-    print("should be nothing: ", end="")
-    print(test_tree.inorder())
-    print(test_tree.find(4)) #shouldn't work
-    test_tree.insert(4)
-    print(test_tree.find(4))
-    nums = [1,5,8,3,0,3,6,7]
-    for num in nums:
-        test_tree.insert(num)
-    print(test_tree.inorder())
-    '''
 
-    '''
-    #test pynauty
-    print("\nTESTING PYNAUTY\n")
-    g = Graph(6, False, {0:[1,4],1:[2,4],2:[3],3:[4,5]})
-    print(g.adjacency_dict)
-    aut = autgrp(g)
-    print(aut)
-    relabel = canon_label(g)
-    print(relabel)
 
-    #test cluster class
-    print("\n\nTESTING ADJACENCY MATRIX SETUP\n")
-    #adjv = adj_dict_to_vector(g)
-    #print(adjv)
+# TEST FUNCTIONS
 
-    test_d = 3
-    test_n =6
-    test_m = 12
-
-    adjm = adj_dict_to_vector(g)
-    print(adjm)
-    '''
-
-    #test_A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
-
-    #test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
-    #test_x = [0.0000000000000000,0.0000000000000000,0.0000000000000000,0.5555555555555556, \
-        #1.2830005981991683,0.9072184232530289,1.0000000000000000,-0.0000000000000000,-0.0000000000000000, \
-        #1.3333333333333333,0.7698003589195010,0.5443310539518174,0.5000000000000000,0.8660254037844386, \
-        #-0.0000000000000000,0.5000000000000000,0.2886751345948129,0.8164965809277260]
-    
-    #print("test_x:",test_x)
-    #Rx = rigidity_matrix(test_x, test_d, test_n)
-    #print(Rx)
-
-    print("\n\nTESTING FOR RIGIDITY\n")
-    #print(is_rigid(Rx, test_d, test_n))
-
-    # test if sign_def() works: it does work
-    pos_eigs = np.array([[2,-1,0],[-1,2,-1],[0,-1,2]])
-    not_def = np.array([[9,0,-8],[6,-5,-2],[-9,3,3]])
-    print("should be T for positive definite:", sign_def(pos_eigs))
-    print("should be F for this one:", sign_def(not_def))
-
-    '''
-    x = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
-    print("cluster:", x)
-    R = rigidity_matrix(x, 3, 8)
-    #print(R)
-    print(is_rigid(R,3,8))
-    '''
-
-    print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
-    
+def test_hc_rigid_clusters(start_n, end_n):
     d = 3
     first_rigid = [] #first order rigid (1)
     pre_stress = [] #pre stress stable (2)
@@ -415,7 +352,7 @@ if __name__ == '__main__':
     hypostatic = [] # contacts < 3n-6
     hypo_stress = [] #hypostatic & pre-stress (should be all of them?)
     #hypo_rigid = -2
-    for n in range(6,7):
+    for n in range(start_n, end_n):
         print("\nTesting n =", n)
         clusters = parse_coords(n)
         for cluster in clusters: #cluster is x
@@ -444,7 +381,7 @@ if __name__ == '__main__':
             #assert rigid != 0 # these all should be rigid
             print("\n")
 
-    print("For all clusters n=6 through 10:")
+    print("For all clusters n =", start_n, "through", end_n-1)
     print("# of first-order rigid clusters:", len(first_rigid))
     print("# of pre-stress stable clusters:", len(pre_stress))
     print("# of non-rigid clusters:", len(not_rigid))
@@ -455,7 +392,7 @@ if __name__ == '__main__':
     print("# of pre-stress stable hypostatics:", len(hypo_stress))
     #print("hypostatic cluster has rigidity value", hypo_rigid)
 
-    print("\nTest a non-rigid cluster!")
+def test_hypercube():
     print("\n3D cube")
     cube3 = [0.0,0.0,0.0, 0.0,0.0,1.0, 0.0,1.0,1.0, 0.0,1.0,0.0, 1.0,0.0,1.0, 1.0,1.0,1.0, 1.0,0.0,0.0, 1.0,1.0,0.0]
     R_cube3 = rigidity_matrix(cube3, 3, 8)
@@ -480,37 +417,131 @@ if __name__ == '__main__':
     # rigid_cube5 = is_rigid(R_cube5,5,32)
     # print(rigid_cube5)
 
-    '''
-    A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
-    contacts = 0
-    for i in range(len(A)):
-        for j in range(i+1, len(A[0])):
-            if A[i][j] == 1:
-                contacts += 1
-    print("contacts:", contacts)
-    '''
+def test_simplex():
+    print("\n3D Simplex (i.e. tetrahedron):\n")
+    simplex3 = [0.5,0.0,-1/(2*math.sqrt(2)), \
+                -0.5,0.0,-1/(2*math.sqrt(2)), \
+                0.0,0.5,1/(2*math.sqrt(2)), \
+                0.0,-0.5,1/(2*math.sqrt(2))]
+    rigid_sim3 = is_rigid(rigidity_matrix(simplex3,3,4),3,4)
+    print(rigid_sim3)
 
-    '''
-    clustree = bst()
-    cluster1 = cluster(adjv)
-    clustree.insert(cluster1)
-    print(clustree.inorder())
+    print("\n4D Simplex:\n")
+    phi = (1 + 5**0.5)/2
+    edge = 2*math.sqrt(2)
+    simplex4 = [2/edge,0,0,0, 0,2/edge,0,0, 0,0,2/edge,0, 0,0,0,2/edge, phi/edge, phi/edge, phi/edge, phi/edge]
+    # simplex4 = [1/(2*math.sqrt(10)), 1/(2*math.sqrt(6)), 1/(2*math.sqrt(3)), 0.5, \
+    #             1/(2*math.sqrt(10)), 1/(2*math.sqrt(6)), 1/(2*math.sqrt(3)), -0.5, \
+    #             1/(2*math.sqrt(10)), 1/(2*math.sqrt(6)), -1/(math.sqrt(3)), 0.0, \
+    #             1/(2*math.sqrt(10)), -1*math.sqrt(3/2)/2, 0.0, 0.0, \
+    #             -1*math.sqrt(2/5), 0.0, 0.0, 0.0]
+    rigid_sim4 = is_rigid(rigidity_matrix(simplex4,4,5),4,5)
+    print(rigid_sim4)
 
-    #test comparison operators - works
-    arr1 = np.array([0,0,0,1,0,1])
-    arr2 = np.array([0,1,0,1,0,1]) #arr1 < arr2
-    clus1 = cluster(arr1)
-    clus2 = cluster(arr2)
-    print(clus1<clus2)
-    '''
+def test_misc():
+    
+    test_tree = bst()
+    print("should be nothing: ", end="")
+    print(test_tree.inorder())
+    print(test_tree.find(4)) #shouldn't work
+    test_tree.insert(4)
+    print(test_tree.find(4))
+    nums = [1,5,8,3,0,3,6,7]
+    for num in nums:
+        test_tree.insert(num)
+    print(test_tree.inorder())
+    
+    
+    #test pynauty
+    print("\nTESTING PYNAUTY\n")
+    g = Graph(6, False, {0:[1,4],1:[2,4],2:[3],3:[4,5]})
+    print(g.adjacency_dict)
+    aut = autgrp(g)
+    print(aut)
+    relabel = canon_label(g)
+    print(relabel)
 
-    '''
-    print("\n\nTESTING SETUP FOR RIGIDITY\n")
-    r = []
-    for contact in range(test_m):
-        r.append([random.randint(1,10) for coord in range(test_d*test_n)])
-    test_r = np.array(r) #should be np 2d array
-    test_r = constrain(test_r, test_d, test_n)
-    print(test_r)
-    print(is_rigid(test_r, test_d, test_n))
-    '''
+    #test cluster class
+    print("\n\nTESTING ADJACENCY MATRIX SETUP\n")
+    #adjv = adj_dict_to_vector(g)
+    #print(adjv)
+
+    test_d = 3
+    test_n =6
+    test_m = 12
+
+    adjm = adj_dict_to_vector(g)
+    print(adjm)
+
+    test_A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
+
+    test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
+    test_x = [0.0000000000000000,0.0000000000000000,0.0000000000000000,0.5555555555555556, \
+        1.2830005981991683,0.9072184232530289,1.0000000000000000,-0.0000000000000000,-0.0000000000000000, \
+        1.3333333333333333,0.7698003589195010,0.5443310539518174,0.5000000000000000,0.8660254037844386, \
+        -0.0000000000000000,0.5000000000000000,0.2886751345948129,0.8164965809277260]
+    
+    print("test_x:",test_x)
+    Rx = rigidity_matrix(test_x, test_d, test_n)
+    print(Rx)
+
+    x = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
+    print("cluster:", x)
+    R = rigidity_matrix(x, 3, 8)
+    #print(R)
+    print(is_rigid(R,3,8))
+
+
+if __name__ == '__main__':
+    
+    #test_misc()
+
+    # print("\n\nTESTING FOR RIGIDITY\n")
+
+    # # test if sign_def() works: it does work
+    # pos_eigs = np.array([[2,-1,0],[-1,2,-1],[0,-1,2]])
+    # not_def = np.array([[9,0,-8],[6,-5,-2],[-9,3,3]])
+    # print("should be T for positive definite:", sign_def(pos_eigs))
+    # print("should be F for this one:", sign_def(not_def))
+
+
+    print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
+    #test_hc_rigid_clusters(6,8)
+
+    print("\nTest a non-rigid cluster!")
+    test_hypercube()
+
+    print("\nTest other rigid structures:")
+    test_simplex()
+    
+    # A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
+    # contacts = 0
+    # for i in range(len(A)):
+    #     for j in range(i+1, len(A[0])):
+    #         if A[i][j] == 1:
+    #             contacts += 1
+    # print("contacts:", contacts)
+    
+
+    # clustree = bst()
+    # cluster1 = cluster(adjv)
+    # clustree.insert(cluster1)
+    # print(clustree.inorder())
+
+    # #test comparison operators - works
+    # arr1 = np.array([0,0,0,1,0,1])
+    # arr2 = np.array([0,1,0,1,0,1]) #arr1 < arr2
+    # clus1 = cluster(arr1)
+    # clus2 = cluster(arr2)
+    # print(clus1<clus2)
+ 
+
+    # print("\n\nTESTING SETUP FOR RIGIDITY\n")
+    # r = []
+    # for contact in range(test_m):
+    #     r.append([random.randint(1,10) for coord in range(test_d*test_n)])
+    # test_r = np.array(r) #should be np 2d array
+    # test_r = constrain(test_r, test_d, test_n)
+    # print(test_r)
+    # print(is_rigid(test_r, test_d, test_n))
+    
