@@ -290,9 +290,9 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     n_w = left_null.shape[1]
     #print("\nbasis of left null space:", left_null)
     #print("dim(left null space) =", n_w)
-    if n_w == 0:
+    if n_w == 0: # this seems to mean the cluster is hypostatic
         print("Not rigid")
-        return 0 #???
+        return 0 #??? return n_v
     else: 
         for m in range(n_w): #iterate from 1 to n_w
             b = [0 for zero in range(n_v)] #b has size n_v
@@ -316,6 +316,14 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
                 return 2
     print("Unable to determine rigidity")
     return -1 #????
+
+def numerical_dimension(x, right_null):
+    '''
+    x is the coordinates of the cluster.
+    right_null is the basis of the right null space of R(x), which was determined and passed in via
+    is_rigid().
+    '''
+    pass
 
 def parse_coords(n): #returns list of lists (of coordinates)
     #f (file) is one long string \n for new clusters
@@ -406,8 +414,8 @@ if __name__ == '__main__':
     idk = [] #can't be determined (-1)]
     hypostatic = [] # contacts < 3n-6
     hypo_stress = [] #hypostatic & pre-stress (should be all of them?)
-    hypo_rigid = -2
-    for n in range(6,11):
+    #hypo_rigid = -2
+    for n in range(6,7):
         print("\nTesting n =", n)
         clusters = parse_coords(n)
         for cluster in clusters: #cluster is x
@@ -432,7 +440,7 @@ if __name__ == '__main__':
                 idk.append(cluster)
             if contacts < d*n - 6:
                 hypostatic.append(cluster)
-                hypo_rigid = rigid
+                #hypo_rigid = rigid
             #assert rigid != 0 # these all should be rigid
             print("\n")
 
@@ -445,15 +453,32 @@ if __name__ == '__main__':
     print("\nFor hypostatic clusters:")
     print("# of hypostatic clusters:", len(hypostatic))
     print("# of pre-stress stable hypostatics:", len(hypo_stress))
-    print("hypostatic cluster has rigidity value", hypo_rigid)
+    #print("hypostatic cluster has rigidity value", hypo_rigid)
 
     print("\nTest a non-rigid cluster!")
-    cube = [0.0,0.0,0.0, 0.0,0.0,1.0, 0.0,1.0,1.0, 0.0,1.0,0.0, 1.0,0.0,1.0, 1.0,1.0,1.0, 1.0,0.0,0.0, 1.0,1.0,0.0]
-    R_cube = rigidity_matrix(cube, 3, 8)
+    print("\n3D cube")
+    cube3 = [0.0,0.0,0.0, 0.0,0.0,1.0, 0.0,1.0,1.0, 0.0,1.0,0.0, 1.0,0.0,1.0, 1.0,1.0,1.0, 1.0,0.0,0.0, 1.0,1.0,0.0]
+    R_cube3 = rigidity_matrix(cube3, 3, 8)
     #print(R_cube)
-    rigid_cube = is_rigid(R_cube,3,8)
-    print(rigid_cube)
-    
+    rigid_cube3 = is_rigid(R_cube3,3,8)
+    print(rigid_cube3)
+
+    print("\n4D cube") # about 1 second delay
+    cube4 = []
+    binary = [0.0,1.0]
+    cube4 += [[a,b,c,d] for a in binary for b in binary for c in binary for d in binary]
+    cube4 = np.array(cube4).flatten()
+    R_cube4 = rigidity_matrix(cube4,4,16)
+    rigid_cube4 = is_rigid(R_cube4,4,16)
+    print(rigid_cube4)
+
+    # print("\n5D cube") # about 15-20 seconds delay? very slow
+    # cube5 = []
+    # cube5 += [[a,b,c,d,e] for a in binary for b in binary for c in binary for d in binary for e in binary]
+    # cube5 = np.array(cube5).flatten()
+    # R_cube5 = rigidity_matrix(cube5,5,32)
+    # rigid_cube5 = is_rigid(R_cube5,5,32)
+    # print(rigid_cube5)
 
     '''
     A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
