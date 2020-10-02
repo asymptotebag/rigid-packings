@@ -1,16 +1,26 @@
 import os
-from pynauty import * #please figure out how to use this
-import numpy as np
-import random
-from scipy import linalg
 import math
+import random
+import numpy as np
+from scipy import linalg
+from scipy import optimize
+from pynauty import * #please figure out how to use this
 #from numpy.linalg import matrix_rank
 
 # GLOBAL VARIABLES
 ADJACENCY_TOL = 10**-5
+INITIAL_ADJACENCY_TOL = 1e-3
+SAME_COORDS_TOL = 1e-5
 
-#convert adjacency dictionary (which is already the adj matrix in a hash table)
-# to a binary vector
+INITIAL_STEP_SIZE = 5e-2
+STEP_SIZE = 5e-3
+TOL_NEWTON = 9e-16 # doesn't this seem really small?
+MAX_STEP_NEWTON = 0.02
+X_TOL_MAX = 10*STEP_SIZE
+X_TOL_MIN = STEP_SIZE/8
+ORTH_TOL = 2*STEP_SIZE
+
+#convert adjacency dictionary (which is already the adj matrix in a hash table) to a binary vector
 
 class Node(object):
     def __init__(self, d): #d will be indices of the clusters w/ that adj. matrix
@@ -118,7 +128,6 @@ class cluster(object):
         #... so try to change it to actually store the array itself
         return np.array2string(self.adj_vector)
 
-# trying out some functions here ************************
 
 def adj_dict_to_vector(graph): #graph is Graph object
     vtxs = graph.number_of_vertices
@@ -132,17 +141,7 @@ def adj_dict_to_vector(graph): #graph is Graph object
     return adj_matrix
     #return adj_matrix.flatten()
 
-'''
-def add_cluster(cluster): #i guess cluster will be a cluster object
-    pass
-'''
-
-def rigidity_matrix(x, d, n, A = [], returnA = True):
-    # can iterate through adjacency matrix A and look for 1s (indicate contacts)
-    # shouldn't depend on the adjacency matrix ********************
-    #kd tree
-    #tolerance for adjacency = 10^-3 or 10^-5
-    
+def adj_matrix(x,d,n, A = [], returnA = True):
     # CREATE ADJACENCY MATRIX FROM VECTOR X
     #print("len(A) =", len(A))
     if returnA: #if you want to return A, make the adjacency matrix
@@ -161,6 +160,16 @@ def rigidity_matrix(x, d, n, A = [], returnA = True):
                     new_row.append(0)
             #print("new row =", new_row)
             A.append(new_row)
+    return A
+
+def rigidity_matrix(x, d, n, A = [], returnA = True):
+    # can iterate through adjacency matrix A and look for 1s (indicate contacts)
+    # shouldn't depend on the adjacency matrix ********************
+    #kd tree
+    #tolerance for adjacency = 10^-3 or 10^-5
+    
+    # CREATE ADJACENCY MATRIX FROM VECTOR X
+    A = adj_matrix(x, d, n, A, returnA)
     
     #assert len(A) == n
     #assert len(A[0]) == n
@@ -276,8 +285,10 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     # if right null space V, dim = n_v = 0 --> return 1 (for 1st order rigid)
     #print("dimension of R:", R.shape[0], "x", R.shape[1])
     right_null = linalg.null_space(R) #V, gives orthonormal basis
-    #print("basis of right null space:", right_null)
+    print("basis of right null space:\n", right_null)
     n_v = right_null.shape[1]
+    print("shape of right null =", right_null.shape)
+    #print(right_null.T[0])
     #print("dim(right null space) =", n_v)
     
     if n_v == 0: #(N,K) array where K = dimension of effective null space
@@ -316,15 +327,74 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
                 print("Pre-stress stable")
                 return 2
     print("Unable to determine rigidity")
+    # numerical_dimension(x, d, n, right_null)
+    # does x need to be passed into this function as well??
     return -1 #????
 
-def numerical_dimension(x, right_null):
+def numerical_dimension(x, d, n, right_null):
     '''
-    x is the coordinates of the cluster.
+    x is the coordinates of the cluster (the "approximate solution").
     right_null is the basis of the right null space of R(x), which was determined and passed in via
-    is_rigid().
+    is_rigid(). right_null must be nonempty (or this function would not have been called).
+    Return estimated dimension of cluster.
     '''
-    pass
+    # print(right_null) 
+    for v_j in right_null.T: # extracts the "vertical" basis vectors
+        basis = [] # need to convert to numpy array later?
+
+        # take step in both directions
+        x_plus = [coord + STEP_SIZE*v for coord, v in zip(x, v_j)]
+        x_neg = [coord - STEP_SIZE*v for coord, v in zip(x, v_j)]
+
+        # project onto constraints
+        # projx_plus, iters_plus = newtons(F, J, x_plus, TOL_NEWTON) #hello what are F and J????
+        # projx_neg, iters_neg = newtons(F, J, x_neg, TOL_NEWTON)
+        # f is adjacency; jac = rigidity?
+        projx_plus = optimize.root(adj_matrix, x_plus, args=(x,d,n,[],True), method='krylov', jac=rigidity_matrix, tol=TOL_NEWTON, callback=None, options=None)
+        #constrain this
+
+        # assuming x, projx, are both np vectors/arrays:
+        tanv_plus = projx_plus - x_plus
+        norm_plus = np.linalg.norm(tanv_plus)
+        if norm_plus > X_TOL_MAX or norm_plus < X_TOL_MIN:
+            pass # reject vector (aka do nothing / skip it)
+        else:
+            # project onto current estimate of B
+            pass
+        
+        # tanv_neg = projx_neg - x_neg
+
+        return len(basis) # prob have to change implementation later
+
+# can also use scipy.optimize.newton ??
+# optimize.newton(func, x0, fprime=None, args=(), tol=TOL_NEWTON, maxiter=50, fprime2=None, 
+#   x1=None, rtol=0.0, full_output=False, disp=True)
+
+# optimize.root(fun, x0, args=(), method='hybr', jac=None, tol=None, callback=None, options=None)
+
+
+def newtons(F, J, x, eps): # IMPLEMENT THIS!
+    """
+    Solve nonlinear system F=0 by Newton's method.
+    J is the Jacobian of F. Both F and J must be functions of x.
+    At input, x holds the start value. The iteration continues
+    until ||F|| < eps.
+    """
+    # impose maximum step size - how ??
+    F_value = F(x)
+    F_norm = np.linalg.norm(F_value, ord=2)  # l2 norm of vector
+    iteration_counter = 0
+    while abs(F_norm) > eps and iteration_counter < 100:
+        delta = np.linalg.solve(J(x), -F_value)
+        x = x + delta
+        F_value = F(x)
+        F_norm = np.linalg.norm(F_value, ord=2)
+        iteration_counter += 1
+
+    # Here, either a solution is found, or too many iterations
+    if abs(F_norm) > eps:
+        iteration_counter = -1
+    return x, iteration_counter
 
 def parse_coords(n): #returns list of lists (of coordinates)
     #f (file) is one long string \n for new clusters
