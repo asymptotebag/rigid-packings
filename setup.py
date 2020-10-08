@@ -313,7 +313,7 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     #print("basis of right null space:\n", right_null)
     n_v = right_null.shape[1]
     #print("shape of right null =", right_null.shape)
-    #print(right_null.T[0])
+    #print(right_null.T)
     #print("dim(right null space) =", n_v)
     
     if n_v == 0: #(N,K) array where K = dimension of effective null space
@@ -368,45 +368,41 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
     failed_newtons = []
     basis = []
     for v_j in right_null.T: # extracts the "vertical" basis vectors
-        # need to convert to numpy array later?
-
-        # take step in both directions
-        x_plus = [coord + STEP_SIZE*v for coord, v in zip(x, v_j)]
-        x_neg = [coord - STEP_SIZE*v for coord, v in zip(x, v_j)]
-
-        # project onto constraints
-        projx_plus, iters_plus = newtons(system_eqs, rigidity_matrix, x_plus, d, n, A) #hello what are F and J????
-        if iters_plus == -1:
-            # exceeded maximum iterations
-            failed_newtons.append((v_j, 'exceeded iters on +'))
-            break
-        if np.inner(projx_plus - x_plus, v_j) > ORTH_TOL: 
-            # i have no idea if this is the right tolerance value to use!!!
-            # require (proj_x - x_plus) perpendicular to v_j --> inner product is zero
-            failed_newtons.append((v_j, 'newton result was not orth'))
-
-        projx_neg, iters_neg = newtons(system_eqs, rigidity_matrix, x_neg, d, n, A)
-        # projx_plus = optimize.root(system_eqs, x_plus, args=(x,d,n,[],True), method='krylov', jac=rigidity_matrix, tol=TOL_NEWTON, callback=None, options=None)
-
-        # assuming x, projx, are both np vectors/arrays:
-        tanv_plus = projx_plus - x
-        norm_plus = np.linalg.norm(tanv_plus)
-        if norm_plus > X_TOL_MAX or norm_plus < X_TOL_MIN:
-            # reject vector (aka do nothing / skip it)
-            pass
-        else:
-            # project onto current estimate of B
-            # projection matrix P = A(A.T A)^-1 A.T
-            if len(basis) == 0:
-                basis.append(tanv_plus/np.linalg.norm(tanv_plus))
+        for sign in ['+','-']:
+            # take step in both directions
+            if sign == '+':
+                x_plus = [coord + STEP_SIZE*v for coord, v in zip(x, v_j)]
             else:
-                proj = projection(tanv_plus,basis)
-                # get orthonormal vector to the projection
-                orthonorm = proj # WHAT IS THIS
-                if np.linalg.norm(orthonorm) > ORTH_TOL:
-                    basis.append(orthonorm)
-        
-        # tanv_neg = projx_neg - x_neg
+                x_plus = [coord - STEP_SIZE*v for coord, v in zip(x, v_j)]
+
+            # project onto constraints
+            projx_plus, iters_plus = newtons(system_eqs, rigidity_matrix, x_plus, d, n, A) #hello what are F and J????
+            if iters_plus == -1:
+                # exceeded maximum iterations
+                failed_newtons.append((v_j, 'exceeded iters on ' + sign))
+                break
+            if np.inner(projx_plus - x_plus, v_j) > ORTH_TOL: 
+                # i have no idea if this is the right tolerance value to use!!!
+                # require (proj_x - x_plus) perpendicular to v_j --> inner product is zero
+                failed_newtons.append((v_j, 'newton result was not orth for ' + sign))
+
+            # projx_plus = optimize.root(system_eqs, x_plus, args=(x,d,n,[],True), method='krylov', jac=rigidity_matrix, tol=TOL_NEWTON, callback=None, options=None)
+
+            # assuming x, projx, are both np vectors/arrays:
+            tanv_plus = projx_plus - x
+            norm_plus = np.linalg.norm(tanv_plus)
+            if norm_plus > X_TOL_MAX or norm_plus < X_TOL_MIN:
+                pass # reject vector (aka do nothing / skip it)
+            else:
+                # project onto current estimate of B
+                # projection matrix P = A(A.T A)^-1 A.T
+                if len(basis) == 0:
+                    basis.append(tanv_plus/np.linalg.norm(tanv_plus))
+                else:
+                    proj = projection(tanv_plus,basis)
+                    orthonorm = tanv_plus - proj # orthogonal portion to the projection - check this
+                    if np.linalg.norm(orthonorm) > ORTH_TOL:
+                        basis.append(orthonorm)
 
     return len(basis) # prob have to change implementation later
 
@@ -653,10 +649,10 @@ if __name__ == '__main__':
     #test_hc_rigid_clusters(10,11)
 
     print("\nTest a non-rigid cluster!")
-    #test_hypercube()
+    test_hypercube()
 
     print("\nTest other rigid structures:")
-    test_simplex()
+    #test_simplex()
     
     # A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
     # contacts = 0
