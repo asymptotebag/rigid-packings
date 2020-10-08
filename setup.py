@@ -162,6 +162,33 @@ def adj_matrix(x,d,n, A = [], returnA = True):
             A.append(new_row)
     return A
 
+def system_eqs(x, d, n, A):
+    '''
+    Given cluster coordinates x (vector sized nd) and its adjacency matrix, return a vector with elements
+    corresponding to all contacts (where A[i][j]=1) and whether the current coordinates (since this is used
+    when x has been perturbed) still fulfill the original equation. Element is 0 if a contact still holds; 
+    otherwise, it is the distance between them. 
+    *** Should an error be raised if the distance is negative? (spheres can't intersect)
+    '''
+    distances = []
+    for i in range(len(A)):
+        #print("i =",i)
+        for j in range(i+1, len(A[0])): 
+            #print("\nj =",j)
+            #i+1 to skip the diagonal (sphere can't contact itself so diagonal always 0)
+            if A[i][j] == 1:
+                #i is always less than j b/c we only iterate through upper triangle
+                norm = 0 # is actually the square of the norm (of x_i - x_j)
+                for k in range(d):
+                    norm += (x[d*i+k] - x[d*j+k])**2
+                #print("norm =", norm)
+                if norm - 1 <= ADJACENCY_TOL: 
+                    distances.append(0) # contact is still present
+                else:
+                    distances.append(norm - 1)
+    return np.array(distances)
+    #return np.array(distances).T
+
 def rigidity_matrix(x, d, n, A = [], returnA = True):
     # can iterate through adjacency matrix A and look for 1s (indicate contacts)
     # shouldn't depend on the adjacency matrix ********************
@@ -269,13 +296,11 @@ def sign_def(matrix): #returns bool
         return False
     return True
 
-#trying the rigidity test here??
 def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     '''
     Returns 1 if cluster if 1st order rigid, 2 if it is pre-stress stable.
     Returns 0 (maybe) if the cluster is not rigid.
     '''
-    #print("\nTUPLE UNPACKING\n")
     #print("RA is " + str(len(RA)) + " elements long.")
     R, A = RA
     #print(R)
@@ -285,9 +310,9 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     # if right null space V, dim = n_v = 0 --> return 1 (for 1st order rigid)
     #print("dimension of R:", R.shape[0], "x", R.shape[1])
     right_null = linalg.null_space(R) #V, gives orthonormal basis
-    print("basis of right null space:\n", right_null)
+    #print("basis of right null space:\n", right_null)
     n_v = right_null.shape[1]
-    print("shape of right null =", right_null.shape)
+    #print("shape of right null =", right_null.shape)
     #print(right_null.T[0])
     #print("dim(right null space) =", n_v)
     
@@ -304,7 +329,8 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     #print("dim(left null space) =", n_w)
     if n_w == 0: # this seems to mean the cluster is hypostatic
         print("Not rigid")
-        return 0 #??? return n_v
+        print("Dimension =", n_v) # for hypostatic clusters, D = n_v = 1
+        return (0,A) #??? return n_v
     else: 
         for m in range(n_w): #iterate from 1 to n_w
             b = [0 for zero in range(n_v)] #b has size n_v
@@ -329,9 +355,9 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     print("Unable to determine rigidity")
     # numerical_dimension(x, d, n, right_null)
     # does x need to be passed into this function as well??
-    return -1 #????
+    return (-1,A) #????
 
-def numerical_dimension(x, d, n, right_null):
+def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
     '''
     x is the coordinates of the cluster (the "approximate solution").
     right_null is the basis of the right null space of R(x), which was determined and passed in via
@@ -339,55 +365,84 @@ def numerical_dimension(x, d, n, right_null):
     Return estimated dimension of cluster.
     '''
     # print(right_null) 
+    failed_newtons = []
+    basis = []
     for v_j in right_null.T: # extracts the "vertical" basis vectors
-        basis = [] # need to convert to numpy array later?
+        # need to convert to numpy array later?
 
         # take step in both directions
         x_plus = [coord + STEP_SIZE*v for coord, v in zip(x, v_j)]
         x_neg = [coord - STEP_SIZE*v for coord, v in zip(x, v_j)]
 
         # project onto constraints
-        # projx_plus, iters_plus = newtons(F, J, x_plus, TOL_NEWTON) #hello what are F and J????
-        # projx_neg, iters_neg = newtons(F, J, x_neg, TOL_NEWTON)
-        # f is adjacency; jac = rigidity?
-        projx_plus = optimize.root(adj_matrix, x_plus, args=(x,d,n,[],True), method='krylov', jac=rigidity_matrix, tol=TOL_NEWTON, callback=None, options=None)
-        #constrain this
+        projx_plus, iters_plus = newtons(system_eqs, rigidity_matrix, x_plus, d, n, A) #hello what are F and J????
+        if iters_plus == -1:
+            # exceeded maximum iterations
+            failed_newtons.append((v_j, 'exceeded iters on +'))
+            break
+        if np.inner(projx_plus - x_plus, v_j) > ORTH_TOL: 
+            # i have no idea if this is the right tolerance value to use!!!
+            # require (proj_x - x_plus) perpendicular to v_j --> inner product is zero
+            failed_newtons.append((v_j, 'newton result was not orth'))
+
+        projx_neg, iters_neg = newtons(system_eqs, rigidity_matrix, x_neg, d, n, A)
+        # projx_plus = optimize.root(system_eqs, x_plus, args=(x,d,n,[],True), method='krylov', jac=rigidity_matrix, tol=TOL_NEWTON, callback=None, options=None)
 
         # assuming x, projx, are both np vectors/arrays:
-        tanv_plus = projx_plus - x_plus
+        tanv_plus = projx_plus - x
         norm_plus = np.linalg.norm(tanv_plus)
         if norm_plus > X_TOL_MAX or norm_plus < X_TOL_MIN:
-            pass # reject vector (aka do nothing / skip it)
+            # reject vector (aka do nothing / skip it)
+            pass
         else:
             # project onto current estimate of B
-            pass
+            # projection matrix P = A(A.T A)^-1 A.T
+            if len(basis) == 0:
+                basis.append(tanv_plus/np.linalg.norm(tanv_plus))
+            else:
+                proj = projection(tanv_plus,basis)
+                # get orthonormal vector to the projection
+                orthonorm = proj # WHAT IS THIS
+                if np.linalg.norm(orthonorm) > ORTH_TOL:
+                    basis.append(orthonorm)
         
         # tanv_neg = projx_neg - x_neg
 
-        return len(basis) # prob have to change implementation later
+    return len(basis) # prob have to change implementation later
 
-# can also use scipy.optimize.newton ??
 # optimize.newton(func, x0, fprime=None, args=(), tol=TOL_NEWTON, maxiter=50, fprime2=None, 
 #   x1=None, rtol=0.0, full_output=False, disp=True)
 
 # optimize.root(fun, x0, args=(), method='hybr', jac=None, tol=None, callback=None, options=None)
 
+def projection(v, A):
+    '''
+    Projects vector v onto the column space of A.
+    '''
+    ata = np.matmul(A.T,A)
+    itmd = np.matmul(A,np.linalg.inv(ata)) #intermediate step
+    proj_matrix = np.matmul(itmd, A.T)
+    project = np.matmul(proj_matrix, v)
+    return project
 
-def newtons(F, J, x, eps): # IMPLEMENT THIS!
+def newtons(F, J, x, d, n, A, eps=TOL_NEWTON): # IMPLEMENT THIS!
     """
     Solve nonlinear system F=0 by Newton's method.
     J is the Jacobian of F. Both F and J must be functions of x.
     At input, x holds the start value. The iteration continues
     until ||F|| < eps.
+    Step size per iteration limited by MAX_STEP_NEWTON.
     """
-    # impose maximum step size - how ??
-    F_value = F(x)
+    F_value = F(x, d, n, A) # need F(x, d, n, A)
     F_norm = np.linalg.norm(F_value, ord=2)  # l2 norm of vector
     iteration_counter = 0
     while abs(F_norm) > eps and iteration_counter < 100:
-        delta = np.linalg.solve(J(x), -F_value)
+        delta = np.linalg.solve(J(x, d, n, A, False), -F_value) # again, need J(x, d, n, A = , False)
+        # constrain maximum step size (did i do this right?????????)
+        if delta > MAX_STEP_NEWTON:
+            delta = MAX_STEP_NEWTON # basically just truncate it
         x = x + delta
-        F_value = F(x)
+        F_value = F(x, d, n, A)
         F_norm = np.linalg.norm(F_value, ord=2)
         iteration_counter += 1
 
@@ -395,6 +450,8 @@ def newtons(F, J, x, eps): # IMPLEMENT THIS!
     if abs(F_norm) > eps:
         iteration_counter = -1
     return x, iteration_counter
+
+# TEST FUNCTIONS
 
 def parse_coords(n): #returns list of lists (of coordinates)
     #f (file) is one long string \n for new clusters
@@ -409,9 +466,6 @@ def parse_coords(n): #returns list of lists (of coordinates)
         clusters.append(this_cluster)
     f.close()
     return clusters
-
-
-# TEST FUNCTIONS
 
 def test_hc_rigid_clusters(start_n, end_n):
     d = 3
@@ -449,7 +503,7 @@ def test_hc_rigid_clusters(start_n, end_n):
                 hypostatic.append(cluster)
                 #hypo_rigid = rigid
             #assert rigid != 0 # these all should be rigid
-            print("\n")
+            #print("\n")
 
     print("For all clusters n =", start_n, "through", end_n-1)
     print("# of first-order rigid clusters:", len(first_rigid))
@@ -466,6 +520,14 @@ def test_hypercube():
     print("\n3D cube")
     cube3 = [0.0,0.0,0.0, 0.0,0.0,1.0, 0.0,1.0,1.0, 0.0,1.0,0.0, 1.0,0.0,1.0, 1.0,1.0,1.0, 1.0,0.0,0.0, 1.0,1.0,0.0]
     R_cube3 = rigidity_matrix(cube3, 3, 8)
+
+    # adj_cube3 = adj_matrix(cube3, 3, 8)
+    # print("\nADJACENCY MATRIX:")
+    # print(np.array(adj_cube3))
+    # contacts3 = system_eqs(cube3, 3, 8, adj_cube3)
+    # print("\nCONTACTS:")
+    # print(contacts3)
+
     #print(R_cube)
     rigid_cube3 = is_rigid(R_cube3,3,8)
     print(rigid_cube3)
@@ -493,6 +555,12 @@ def test_simplex():
                 -0.5,0.0,-1/(2*math.sqrt(2)), \
                 0.0,0.5,1/(2*math.sqrt(2)), \
                 0.0,-0.5,1/(2*math.sqrt(2))]
+    adj_sim3 = adj_matrix(simplex3, 3, 4)
+    print("\nADJACENCY MATRIX:")
+    print(np.array(adj_sim3))
+    contacts3 = system_eqs(simplex3, 3, 4, adj_sim3)
+    print("\nCONTACTS:")
+    print(contacts3)
     rigid_sim3 = is_rigid(rigidity_matrix(simplex3,3,4),3,4)
     print(rigid_sim3)
 
@@ -505,6 +573,12 @@ def test_simplex():
     #             1/(2*math.sqrt(10)), 1/(2*math.sqrt(6)), -1/(math.sqrt(3)), 0.0, \
     #             1/(2*math.sqrt(10)), -1*math.sqrt(3/2)/2, 0.0, 0.0, \
     #             -1*math.sqrt(2/5), 0.0, 0.0, 0.0]
+    # adj_sim4 = adj_matrix(simplex4, 4, 5)
+    # print("\nADJACENCY MATRIX:")
+    # print(np.array(adj_sim4))
+    # contacts4 = system_eqs(simplex4, 4, 5, adj_sim4)
+    # print("\nCONTACTS:")
+    # print(contacts4)
     rigid_sim4 = is_rigid(rigidity_matrix(simplex4,4,5),4,5)
     print(rigid_sim4)
 
@@ -576,10 +650,10 @@ if __name__ == '__main__':
 
 
     print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
-    #test_hc_rigid_clusters(6,8)
+    #test_hc_rigid_clusters(10,11)
 
     print("\nTest a non-rigid cluster!")
-    test_hypercube()
+    #test_hypercube()
 
     print("\nTest other rigid structures:")
     test_simplex()
