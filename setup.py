@@ -182,10 +182,11 @@ def system_eqs(x, d, n, A):
                 for k in range(d):
                     norm += (x[d*i+k] - x[d*j+k])**2
                 #print("norm =", norm)
-                if norm - 1 <= ADJACENCY_TOL: 
+                if norm - 1 < 1e-6: 
                     distances.append(0) # contact is still present
                 else:
                     distances.append(norm - 1)
+    distances += [0 for constraint in range(int(d*(d+1)/2))]
     return np.array(distances)
     #return np.array(distances).T
 
@@ -318,7 +319,7 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     
     if n_v == 0: #(N,K) array where K = dimension of effective null space
         print("First-order rigid")
-        return 1
+        return (1,right_null)
     
 
     #TEST PRE-STRESS STABILITY
@@ -330,7 +331,7 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     if n_w == 0: # this seems to mean the cluster is hypostatic
         print("Not rigid")
         print("Dimension =", n_v) # for hypostatic clusters, D = n_v = 1
-        return (0,A) #??? return n_v
+        return (0,right_null) #??? return n_v
     else: 
         for m in range(n_w): #iterate from 1 to n_w
             b = [0 for zero in range(n_v)] #b has size n_v
@@ -351,11 +352,11 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
                 Q_m.append(new_row)
             if sign_def(Q_m):
                 print("Pre-stress stable")
-                return 2
+                return (2,right_null)
     print("Unable to determine rigidity")
-    # numerical_dimension(x, d, n, right_null)
+    # numerical_dimension(x, d, n, A, right_null)
     # does x need to be passed into this function as well??
-    return (-1,A) #????
+    return (-1,right_null) #????
 
 def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
     '''
@@ -368,6 +369,7 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
     failed_newtons = []
     basis = []
     for v_j in right_null.T: # extracts the "vertical" basis vectors
+        #print("v_j =", v_j)
         for sign in ['+','-']:
             # take step in both directions
             if sign == '+':
@@ -376,7 +378,12 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
                 x_plus = [coord - STEP_SIZE*v for coord, v in zip(x, v_j)]
 
             # project onto constraints
+            #print("x =", x)
+            #print("xplus =", x_plus)
             projx_plus, iters_plus = newtons(system_eqs, rigidity_matrix, x_plus, d, n, A) #hello what are F and J????
+            
+            print("iterations =", iters_plus)
+            print(system_eqs(x_plus,d,n,A))
             if iters_plus == -1:
                 # exceeded maximum iterations
                 failed_newtons.append((v_j, 'exceeded iters on ' + sign))
@@ -399,12 +406,12 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
                 if len(basis) == 0:
                     basis.append(tanv_plus/np.linalg.norm(tanv_plus))
                 else:
-                    proj = projection(tanv_plus,basis)
+                    proj = projection(tanv_plus,basis) # this probably needs to be basis.T
                     orthonorm = tanv_plus - proj # orthogonal portion to the projection - check this
                     if np.linalg.norm(orthonorm) > ORTH_TOL:
-                        basis.append(orthonorm)
+                        basis.append(orthonorm/np.linalg.norm(orthonorm))
 
-    return len(basis) # prob have to change implementation later
+    return len(basis)
 
 # optimize.newton(func, x0, fprime=None, args=(), tol=TOL_NEWTON, maxiter=50, fprime2=None, 
 #   x1=None, rtol=0.0, full_output=False, disp=True)
@@ -415,9 +422,16 @@ def projection(v, A):
     '''
     Projects vector v onto the column space of A.
     '''
-    ata = np.matmul(A.T,A)
-    itmd = np.matmul(A,np.linalg.inv(ata)) #intermediate step
-    proj_matrix = np.matmul(itmd, A.T)
+    A = np.array(A)
+    #print(A)
+    if len(A.shape) == 1: # basis only has 1 vector in it
+        A_T = A[:,None] # transpose of single vector
+    else:
+        A_T = A.T
+    ata = np.matmul(A, A_T)
+    print("ata:", ata)
+    itmd = np.matmul(A_T,np.linalg.inv(ata)) #intermediate
+    proj_matrix = np.matmul(itmd, A)
     project = np.matmul(proj_matrix, v)
     return project
 
@@ -432,11 +446,13 @@ def newtons(F, J, x, d, n, A, eps=TOL_NEWTON): # IMPLEMENT THIS!
     F_value = F(x, d, n, A) # need F(x, d, n, A)
     F_norm = np.linalg.norm(F_value, ord=2)  # l2 norm of vector
     iteration_counter = 0
+    print(abs(F_norm))
     while abs(F_norm) > eps and iteration_counter < 100:
-        delta = np.linalg.solve(J(x, d, n, A, False), -F_value) # again, need J(x, d, n, A = , False)
+        delta = np.linalg.solve(J(x, d, n, A, False), -F_value) # again, need J(x, d, n, A, False)
         # constrain maximum step size (did i do this right?????????)
-        if delta > MAX_STEP_NEWTON:
-            delta = MAX_STEP_NEWTON # basically just truncate it
+        delt_norm = np.linalg.norm(delta)
+        if delt_norm > MAX_STEP_NEWTON:
+            delta = delta*(MAX_STEP_NEWTON/delt_norm) # scale to max step size
         x = x + delta
         F_value = F(x, d, n, A)
         F_norm = np.linalg.norm(F_value, ord=2)
@@ -578,6 +594,30 @@ def test_simplex():
     rigid_sim4 = is_rigid(rigidity_matrix(simplex4,4,5),4,5)
     print(rigid_sim4)
 
+def test_numerical(start_n,end_n):
+    d = 3
+    for n in range(start_n, end_n):
+        print("\nTesting n =", n)
+        clusters = parse_coords(n)
+        print("# of clusters:", len(clusters))
+        for cluster in clusters: #cluster is x
+            assert len(cluster) == d*n
+            #print("cluster:", cluster)
+            RA = rigidity_matrix(cluster, d, n) # returns (R, A)
+            # contacts = 0
+            # for i in range(len(RA[1])):
+            #     for j in range(i+1, len(RA[1][0])):
+            #         if RA[1][i][j] == 1:
+            #             contacts += 1
+            # print("cluster has # contacts:", contacts)
+            rigid = is_rigid(RA,d,n) #0, 1, or 2
+            if isinstance(rigid, tuple): # rigid == -1 or rigid == 0
+                print("\nReturned by analytic method:", rigid[0])
+                print("Calculating numerical method...")
+                lenB = numerical_dim(cluster,d,n,RA[1],rigid[1])
+                print("Length of estimated basis:", lenB)
+                print()
+
 def test_misc():
     
     test_tree = bst()
@@ -649,10 +689,22 @@ if __name__ == '__main__':
     #test_hc_rigid_clusters(10,11)
 
     print("\nTest a non-rigid cluster!")
-    test_hypercube()
+    #test_hypercube()
 
     print("\nTest other rigid structures:")
     #test_simplex()
+
+    print("\nTest projection") # must pass in np arrays - so check for this
+    b=np.array([1,2,2])
+    A = np.array([[1,1],[1,2],[1,3]]).T
+    # b = [1,2,2]
+    # A = [[1,1],[1,2],[1,3]]
+    print(projection(b,A))
+    #print(np.linalg.lstsq(A,b))
+
+    print("\nTest numerical method")
+    test_numerical(8,9)
+
     
     # A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
     # contacts = 0
