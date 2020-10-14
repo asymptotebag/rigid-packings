@@ -324,7 +324,9 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
 
     #TEST PRE-STRESS STABILITY
     transpose = R.T
+    print("TRANSPOSE:", transpose)
     left_null = linalg.null_space(transpose)#W
+    print("SHAPE:", left_null.shape)
     n_w = left_null.shape[1]
     #print("\nbasis of left null space:", left_null)
     #print("dim(left null space) =", n_w)
@@ -350,6 +352,7 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
                     # does it need to be the transpose of right_null[i]?????????
                     new_row.append(np.matmul(wR, right_null.T[j]))
                 Q_m.append(new_row)
+            print(Q_m)
             if sign_def(Q_m):
                 print("Pre-stress stable")
                 return (2,right_null)
@@ -448,7 +451,13 @@ def newtons(F, J, x, d, n, A, eps=TOL_NEWTON): # IMPLEMENT THIS!
     iteration_counter = 0
     print(abs(F_norm))
     while abs(F_norm) > eps and iteration_counter < 100:
-        delta = np.linalg.solve(J(x, d, n, A, False), -F_value) # again, need J(x, d, n, A, False)
+        jac = J(x, d, n, A, False)
+        #print("size:", jac.shape)
+        if jac.shape[0] == jac.shape[1]: #square matrix
+            delta = np.linalg.solve(jac, -F_value)
+        else:
+            inv = np.linalg.pinv(jac)
+            delta = np.matmul(inv,-F_value)
         # constrain maximum step size (did i do this right?????????)
         delt_norm = np.linalg.norm(delta)
         if delt_norm > MAX_STEP_NEWTON:
@@ -502,7 +511,7 @@ def test_hc_rigid_clusters(start_n, end_n):
                         contacts += 1
             
             #print(R)
-            rigid = is_rigid(R,d,n) #0, 1, or 2
+            rigid = is_rigid(R,d,n)[0] #0, 1, or 2
             if rigid == 1:
                 first_rigid.append(cluster)
             elif rigid == 2:
@@ -526,6 +535,8 @@ def test_hc_rigid_clusters(start_n, end_n):
     print("\nFor hypostatic clusters:")
     print("# of hypostatic clusters:", len(hypostatic))
     print("# of pre-stress stable hypostatics:", len(hypo_stress))
+    print("Hypostatic clusters:")
+    print(hypostatic)
     #print("hypostatic cluster has rigidity value", hypo_rigid)
 
 def test_hypercube():
@@ -703,8 +714,15 @@ if __name__ == '__main__':
     #print(np.linalg.lstsq(A,b))
 
     print("\nTest numerical method")
-    test_numerical(8,9)
-
+    #test_numerical(8,9)
+    hypo_sample = [0.0, 0.0, 0.0, 1.0, 1e-16, 1e-16, -0.5000000000000001, 0.8660254037844386, 7.2894146e-09, 1.0000000033065455, 1.6037507496579957, 0.4536092048770559, 0.9999999940482179, 0.5773502657533626, -0.8164965833575311, -3.9678548e-09, 1.5396007262783127, -0.5443310398639957, 3.3065458e-09, 1.603750740716201, 0.4536092267089183, 0.999999996032145, 1.53960071554816, -0.5443310604312973, 1.5000000000000002, 0.8660254037844389, -7.2894148e-09, 0.5, 0.8660254037844386, -2e-16]
+    RA = rigidity_matrix(hypo_sample,3,10)
+    R, A = RA
+    print("\nRIGHT NULL\n")
+    print(is_rigid(RA,3,10))
+    right_null = linalg.null_space(R)
+    lenB = numerical_dim(hypo_sample,3,10,A,right_null)
+    print("Length of estimated basis:", lenB)
     
     # A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
     # contacts = 0
