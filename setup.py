@@ -6,6 +6,7 @@ from scipy import linalg
 from scipy import optimize
 from pynauty import * #please figure out how to use this
 #from numpy.linalg import matrix_rank
+import matplotlib.pyplot as plt
 
 # GLOBAL VARIABLES
 ADJACENCY_TOL = 10**-5
@@ -128,6 +129,9 @@ class cluster(object):
         #... so try to change it to actually store the array itself
         return np.array2string(self.adj_vector)
 
+#def add_cluster():
+
+# METHODS FOR RIGIDITY AND DIMENSION
 
 def adj_dict_to_vector(graph): #graph is Graph object
     vtxs = graph.number_of_vertices
@@ -324,7 +328,7 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
 
     #TEST PRE-STRESS STABILITY
     transpose = R.T
-    print("TRANSPOSE:", transpose)
+    #print("TRANSPOSE:", transpose)
     left_null = linalg.null_space(transpose)#W
     print("SHAPE:", left_null.shape)
     n_w = left_null.shape[1]
@@ -376,9 +380,9 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
         for sign in ['+','-']:
             # take step in both directions
             if sign == '+':
-                x_plus = [coord + STEP_SIZE*v for coord, v in zip(x, v_j)]
+                x_plus = [coord + INITIAL_STEP_SIZE*v for coord, v in zip(x, v_j)]
             else:
-                x_plus = [coord - STEP_SIZE*v for coord, v in zip(x, v_j)]
+                x_plus = [coord - INITIAL_STEP_SIZE*v for coord, v in zip(x, v_j)]
 
             # project onto constraints
             #print("x =", x)
@@ -433,6 +437,7 @@ def projection(v, A):
         A_T = A.T
     ata = np.matmul(A, A_T)
     print("ata:", ata)
+    # CHECK IF ATA IS SQUARE!!! if not use moore penrose inv - pinv
     itmd = np.matmul(A_T,np.linalg.inv(ata)) #intermediate
     proj_matrix = np.matmul(itmd, A)
     project = np.matmul(proj_matrix, v)
@@ -472,6 +477,115 @@ def newtons(F, J, x, d, n, A, eps=TOL_NEWTON): # IMPLEMENT THIS!
         iteration_counter = -1
     return x, iteration_counter
 
+# MOVING ALONG ONE-DIMENSIONAL MANIFOLD
+
+def within_tol(x,d,n,A,broken,tol=INITIAL_ADJACENCY_TOL):
+    '''
+    Return bool based on whether 2 spheres are now adjacent (??)
+    broken is a list of indices that correspond to broken contacts (should only be 1 at a time).
+    '''
+    contacts = system_eqs(x,d,n,A)
+    for i in range(len(contacts)):
+        if i in broken and contacts[i] < tol:
+            return i # so return index corresponding to which thing was re-contacted?
+    return None #nothing is within tolerance (default)
+
+
+def manifold(x0, d, n, A, basis):
+    '''
+    Method called only if we have a 1D solution set.
+    Input: basis is np matrix B, calculated in numerical dimension method.
+    '''
+    x = x0 # make a copy since we're mutating x
+    dirs = [] # directions for which contacts increase - may change to set
+    broken = {} # map {contact # : distance}
+    contacts = system_eqs(x,d,n,A) # some should be != 0
+    for i in range(len(contacts)):
+        if contacts[i] != 0:
+            broken[i] = contacts[i]
+    for vec in basis.T:
+        new_contacts = system_eqs(x + INITIAL_STEP_SIZE*vec,d,n,A)
+        increased = True
+        for contact in broken:
+            if new_contacts[contact] <= broken[contact]:
+                increased = False
+                break
+        if increased:
+            dirs.append(vec) # added only if the direction makes ALL contacts increase
+    
+    
+    for v_k in dirs:
+        v = v_k # update this as you go
+        prev_step = x # used for when we backtrack 1 step at the end
+        step_count = 0
+        # create new for loop here / or while loop testing for tolerance btwn spheres
+        while within_tol(x,d,n,A,broken) is None: # stop when you get 2 spheres close enough
+            step_count += 1
+
+            # take step in tangent direction, along manifold
+            step = [coord + INITIAL_STEP_SIZE*v for coord, v in zip(x, v)] # is it vector x we're adding to?
+            
+            # project back onto manifold
+            step, iters = newtons(system_eqs, rigidity_matrix, step, d, n, A)
+            if iters == -1: #newton's failed
+                raise KeyboardInterrupt
+            newR = rigidity_matrix(step, d, n, A, False)
+            right_null = linalg.null_space(newR)
+            v = projection(v, right_null)
+            prev_step = x # save prev position
+            x = step # update current position
+
+            #check dimension after step 1
+            if step_count == 1:
+                dim = is_rigid((newR, A), d, n)
+                if dim[0] == 0 or dim[0] == -1: # analytic method didn't work
+                    dim = numerical_dim(x, d, n, A, dim[1])
+                else:
+                    dim = dim[0] # only keep the number
+                    if dim == 1 or dim == 2:
+                        dim = 0
+                    # else:
+                    #     dim = 1 # ????
+                # check if dim has increased or decreased
+                if dim > 1:
+                    return -1 # stop moving, dim increased
+                elif dim < 1:
+                    break # does this mean we moved back to the original??
+
+        x = prev_step # back up 1 step
+
+        # repeat continuation with smaller step size
+        while within_tol(x,d,n,A,broken) is None: # stop when you get 2 spheres close enough, again
+            #step_count += 1
+            # take step in tangent direction, along manifold
+            step = [coord + STEP_SIZE*v for coord, v in zip(x, v)]
+            
+            # project back onto manifold
+            step, iters = newtons(system_eqs, rigidity_matrix, step, d, n, A)
+            if iters == -1: #newton's failed
+                raise KeyboardInterrupt
+            newR = rigidity_matrix(step, d, n, A, False)
+            right_null = linalg.null_space(newR)
+            v = projection(v, right_null)
+            #prev_step = x
+            x = step # update current position
+        
+        # Then, we project onto this new set of constraints and check if the cluster is rigid, 
+        # using a new tolerance tolA to determine whether two spheres are adjacent.
+        proj_final, iters = newtons(system_eqs, rigidity_matrix, x, d, n, A)
+        if iters == -1: # projection failed
+            '''
+            delete subsets of the new constraints until the projection succeeds
+            '''
+            pass
+        finalR = rigidity_matrix(x,d,n,A)
+        final_rigidity = is_rigid(finalR,d,n)
+        # implement numerical method here?
+        if final_rigidity == 1 or final_rigidity == 2:
+            # new cluster found!
+            pass
+
+
 # TEST FUNCTIONS
 
 def parse_coords(n): #returns list of lists (of coordinates)
@@ -496,6 +610,9 @@ def test_hc_rigid_clusters(start_n, end_n):
     idk = [] #can't be determined (-1)]
     hypostatic = [] # contacts < 3n-6
     hypo_stress = [] #hypostatic & pre-stress (should be all of them?)
+    cond_1 = [] # condition numbers of first-order matrices
+    cond_pre = [] # cond of pre-stress stable
+    cond_w0 = [] # cond of matrices where |W| = 0
     #hypo_rigid = -2
     for n in range(start_n, end_n):
         print("\nTesting n =", n)
@@ -505,6 +622,7 @@ def test_hc_rigid_clusters(start_n, end_n):
             #print("cluster:", cluster)
             R = rigidity_matrix(cluster, d, n)
             contacts = 0
+            
             for i in range(len(R[1])):
                 for j in range(i+1, len(R[1][0])):
                     if R[1][i][j] == 1:
@@ -514,10 +632,18 @@ def test_hc_rigid_clusters(start_n, end_n):
             rigid = is_rigid(R,d,n)[0] #0, 1, or 2
             if rigid == 1:
                 first_rigid.append(cluster)
+                cond_1.append(np.linalg.cond(R[0]))
             elif rigid == 2:
                 pre_stress.append(cluster)
+                cond_pre.append(np.linalg.cond(R[0]))
+                # test svd
+                u, s, vh = np.linalg.svd(R[0], full_matrices=True)
+                sig = np.diag(s[:-1])
+                print("null space of Sigma:", linalg.null_space(sig))
+                #print("singular values:", s)
             elif rigid == 0:
                 not_rigid.append(cluster)
+                cond_w0.append(np.linalg.cond(R[0]))
             elif rigid == -1:
                 idk.append(cluster)
             if contacts < d*n - 6:
@@ -538,6 +664,10 @@ def test_hc_rigid_clusters(start_n, end_n):
     print("Hypostatic clusters:")
     print(hypostatic)
     #print("hypostatic cluster has rigidity value", hypo_rigid)
+
+    print("\nAvg cond of first-order R(x):", np.mean(cond_1))
+    print("\nAvg cond of pre-stress R(x):", np.mean(cond_pre))
+    print("\nAvg cond of |W| = 0 R(x):", np.mean(cond_w0))
 
 def test_hypercube():
     print("\n3D cube")
@@ -629,6 +759,23 @@ def test_numerical(start_n,end_n):
                 print("Length of estimated basis:", lenB)
                 print()
 
+def moments(n):
+    clusters = parse_coords(n)
+    moments = []
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+    
+        moment = 0
+        for coord in coords:
+            moment += np.linalg.norm(np.array(coord) - np.array(center)) ** 2
+        moments.append(moment)
+    return moments
+
 def test_misc():
     
     test_tree = bst()
@@ -697,7 +844,7 @@ if __name__ == '__main__':
 
 
     print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
-    #test_hc_rigid_clusters(10,11)
+    #test_hc_rigid_clusters(6,10)
 
     print("\nTest a non-rigid cluster!")
     #test_hypercube()
@@ -705,24 +852,38 @@ if __name__ == '__main__':
     print("\nTest other rigid structures:")
     #test_simplex()
 
-    print("\nTest projection") # must pass in np arrays - so check for this
-    b=np.array([1,2,2])
-    A = np.array([[1,1],[1,2],[1,3]]).T
-    # b = [1,2,2]
-    # A = [[1,1],[1,2],[1,3]]
-    print(projection(b,A))
-    #print(np.linalg.lstsq(A,b))
+    # print("\nTest projection") # must pass in np arrays - so check for this
+    # b=np.array([1,2,2])
+    # A = np.array([[1,1],[1,2],[1,3]]).T
+    # #b = [1,2,2]
+    # # A = [[1,1],[1,2],[1,3]]
+    # print(projection(b,A))
+
+    # A = np.array([[1,1],[1,2],[1,3]])
+    # b = b[:,None]
+    # x, res, rank, s, = np.linalg.lstsq(A,b)
+    # print(np.matmul(A,x))
+
+    print("\nSecond moments of clusters:")
+    for n in range(6,11):
+        print("\nSpheres for n =", n)
+        moms = moments(n)
+        #print(moms)
+        # plt.plot(moms)
+        # plt.ylabel('second moment')
+        # plt.show()
+        print("min*4 =", min(moms)*4)
 
     print("\nTest numerical method")
     #test_numerical(8,9)
-    hypo_sample = [0.0, 0.0, 0.0, 1.0, 1e-16, 1e-16, -0.5000000000000001, 0.8660254037844386, 7.2894146e-09, 1.0000000033065455, 1.6037507496579957, 0.4536092048770559, 0.9999999940482179, 0.5773502657533626, -0.8164965833575311, -3.9678548e-09, 1.5396007262783127, -0.5443310398639957, 3.3065458e-09, 1.603750740716201, 0.4536092267089183, 0.999999996032145, 1.53960071554816, -0.5443310604312973, 1.5000000000000002, 0.8660254037844389, -7.2894148e-09, 0.5, 0.8660254037844386, -2e-16]
-    RA = rigidity_matrix(hypo_sample,3,10)
-    R, A = RA
-    print("\nRIGHT NULL\n")
-    print(is_rigid(RA,3,10))
-    right_null = linalg.null_space(R)
-    lenB = numerical_dim(hypo_sample,3,10,A,right_null)
-    print("Length of estimated basis:", lenB)
+    # hypo_sample = [0.0, 0.0, 0.0, 1.0, 1e-16, 1e-16, -0.5000000000000001, 0.8660254037844386, 7.2894146e-09, 1.0000000033065455, 1.6037507496579957, 0.4536092048770559, 0.9999999940482179, 0.5773502657533626, -0.8164965833575311, -3.9678548e-09, 1.5396007262783127, -0.5443310398639957, 3.3065458e-09, 1.603750740716201, 0.4536092267089183, 0.999999996032145, 1.53960071554816, -0.5443310604312973, 1.5000000000000002, 0.8660254037844389, -7.2894148e-09, 0.5, 0.8660254037844386, -2e-16]
+    # RA = rigidity_matrix(hypo_sample,3,10)
+    # R, A = RA
+    # print("\nRIGHT NULL\n")
+    # print(is_rigid(RA,3,10))
+    # right_null = linalg.null_space(R)
+    # lenB = numerical_dim(hypo_sample,3,10,A,right_null)
+    # print("Length of estimated basis:", lenB)
     
     # A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
     # contacts = 0
