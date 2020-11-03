@@ -1,16 +1,15 @@
 import os
 import math
-import random
+#import random
 import numpy as np
 from scipy import linalg
 from scipy import optimize
 from pynauty import * #please figure out how to use this
 import cvxpy as cvx
-#from numpy.linalg import matrix_rank
 import matplotlib.pyplot as plt
 
 # GLOBAL VARIABLES
-ADJACENCY_TOL = 10**-5
+ADJACENCY_TOL = 1e-5
 INITIAL_ADJACENCY_TOL = 1e-3
 SAME_COORDS_TOL = 1e-5
 
@@ -147,6 +146,9 @@ def adj_dict_to_vector(graph): #graph is Graph object
     #return adj_matrix.flatten()
 
 def adj_matrix(x,d,n, A = [], returnA = True):
+    '''
+    Return n x n adjacency matrix of cluster as a list of lists (not numpy array).
+    '''
     # CREATE ADJACENCY MATRIX FROM VECTOR X
     #print("len(A) =", len(A))
     if returnA: #if you want to return A, make the adjacency matrix
@@ -293,14 +295,14 @@ def sign_def(matrix): #returns bool
     if eigs[0] > 0: #test for positive
         for eig in eigs:
             if eig <= 0:
-                return False
+                return (False, None)
     elif eigs[0] < 0: #test negative sign definite
         for eig in eigs:
             if eig >= 0:
-                return False
+                return (False, None)
     else: #first term 0
-        return False
-    return True
+        return (False, None)
+    return (True, np.sign(eigs[0]) * min([abs(eig) for eig in eigs])) # returns eig w/ min abs value
 
 def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
     '''
@@ -329,8 +331,6 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
         print("First-order rigid")
         return (1,right_null)
     
-
-    #TEST PRE-STRESS STABILITY
     transpose = R.T
     #print("TRANSPOSE:", transpose)
     left_null = linalg.null_space(transpose)#W
@@ -343,6 +343,8 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
         print("Dimension =", n_v) # for hypostatic clusters, D = n_v = 1
         return (0,right_null) #??? return n_v
     else: 
+        #TEST PRE-STRESS STABILITY
+        '''
         for m in range(n_w): #iterate from 1 to n_w
             b = [0 for zero in range(n_v)] #b has size n_v
             b[m] = 1 #b_m = e_m
@@ -361,42 +363,134 @@ def is_rigid(RA, d, n): #R is rigidity matrix (should be 2d numpy array)
                     new_row.append(np.matmul(wR, right_null.T[j]))
                 Q_m.append(new_row)
             print(Q_m)
-            if sign_def(Q_m):
+            if sign_def(Q_m)[0]:
                 print("Pre-stress stable")
                 return (2,right_null)
+            '''
+        if sdp(right_null, left_null, A, d) is not None:
+            print("Pre-stress stable")
+            return (2, right_null)
     print("Unable to determine rigidity")
     # numerical_dimension(x, d, n, A, right_null)
     # does x need to be passed into this function as well??
     return (-1,right_null) #????
 
-def omega(w):
+def omega(w, A, d):
     '''
     Returns stress matrix Omega with dimensions dn x dn.
     Omega acts on two flexes (u,v in right kernel) as u.T*Omega*v = sum( w_ij (u_i - u_j)(v_i - v_j)) - in R
+    "Large" omega is the Kronecker product of the n x n stress matrix with d x d identity.
     '''
-    raise NotImplementedError
+    # contacts btwn i, j should be ordered so that smallest i come first
 
-def sdp(V, W, omega):
+    # make "small" n x n stress matrix first
+    n = len(A)
+    s = np.zeros((n,n)) #small stress matrix
+    w_index = 0
+    for i in range(n):
+        #print("i =",i)
+        for j in range(i+1, n): 
+            #print("\nj =",j)
+            #i+1 to skip the diagonal (sphere can't contact itself so diagonal always 0)
+            if A[i][j] == 1:
+                s[i][j] = -w[w_index]
+                s[j][i] = -w[w_index]
+                w_index += 1
+    # set diagonal entries
+    for i in range(n): # len(A) = n
+        rowsum = 0
+        for j in range(n):
+            if j != i:
+                rowsum += s[i][j]
+        s[i][i] = -1*rowsum
+        #assert sum([x for x in s[i]]) <= 1e-5 # rowsum must be 0
+    # for i in range(n):
+    #     assert sum([s[i][j] for j in range(n)]) == 0 # colsum must be 0
+    #print("\nSMALL STRESS MATRIX:\n", s)
+    I = np.eye(d)
+    stress = np.kron(s, I)
+    return stress
+
+def sdp(V, W, A, d):
+    '''
+    Input: V (np array) = basis of right null space; W (np array) = basis of left null space.
+    Returns tuple (stress_opt, opt_eig) representing the optimal stress w in R^m and corresponding eigenvalue. (?)
+    Raises ValueError if the test was unsuccessful.
+    '''
+    # print("shape of W before:", W.shape)
+    
+    # print("shape of W after:", W.shape)
     # M_i = V.T * Omega(w_i) * V
     n_v = V.shape[1]
     n_w = W.shape[1]
     I = np.identity(n_v)
+    W = W.T
+    print("n_w =", n_w)
+
+    # handle special cases: either n_w = 1 or n_v = 1
+    if n_w == 1:
+        # only 1 self-stress
+        M = np.matmul(V.T, omega(W[0], A, d))
+        M = np.matmul(M, V)
+        M = (M + M.T)/2
+        s_def, min_eig = sign_def(M) # bool, num
+        if s_def:
+            return (np.sign(min_eig)*W[0], abs(min_eig))
+        else:
+            #raise ValueError("test unsuccessful: M not sign definite for n_w = 1")
+            return None
+    elif n_v == 1:
+        # only 1 infinitesimal flex, each M is a scalar
+        Ms = [] # store the Ms, find max abs value
+        maxM_i = None
+        sign_max = 1
+        for i in range(n_w):
+            M = np.matmul(V.T, omega(W[i], A, d)) # V[:,None] to take transpose of 1d vector (??)
+            M = np.matmul(M, V)
+            M = float(M) # M should be a scalar
+            if M != 0: # should I watch out for numerical tolerance?
+                Ms.append(abs(M)) # only store positive values in Ms
+                if maxM_i is None or abs(M) > abs(Ms[maxM_i]):
+                    maxM_i = i
+                    sign_max = np.sign(M)
+    
+        if len(Ms) == 0:
+            #raise ValueError("test unsuccessful: all M = 0 for n_v = 1")
+            return None
+        else:
+            return (sign_max * W[maxM_i], Ms[maxM_i])
 
     t = cvx.Variable() # scalar
     a = cvx.Variable(n_w)
-    X = cvx.Variable((n_v,n_v),symmetric=True)
-    constraints = [X >> 0, cvx.norm(a)<=1]
+    #X = cvx.Variable((n_v,n_v),symmetric=True)
+    X = np.zeros((n_v,n_v))
+    
     for i in range(n_w):
-        M = np.matmul(V.T, omega(W[i]))
+        M = np.matmul(V.T, omega(W[i], A, d))
         M = np.matmul(M, V)
-        constraints += [] # add the constraints
-    #constraints.append()
+        M = (M + M.T)/2 # symmetrize to remove imaginary eigenvalues
+        X += a[i]*M - t*I
+    constraints = [X >> 0, cvx.norm(a)<=1]
 
     prob = cvx.Problem(cvx.Maximize(t),constraints)
     prob.solve()
     t_opt = prob.value
     a_opt = a.value
-    raise NotImplementedError
+    if t_opt <= 0:
+        #raise ValueError("test unsuccessful, t_opt is nonpositive")
+        print("test unsuccessful, t_opt is nonpositive")
+        return None
+    print("STATUS:", prob.status)
+    if prob.status == cvx.OPTIMAL:
+        print("\na_opt =", a_opt)
+        print("\nt_opt =", t_opt)
+        return 0 # only checking if it's not None
+        stress_opt = np.zeros(n_w)
+        for i in range(n_w):
+            stress_opt += np.array(a_opt[i]*W[i]) # this is a cvx variable - np might not work here?
+        return (stress_opt, t_opt) # t_opt is the optimal eigenvalue
+    else:
+        raise ValueError("CVX did not find optimal solution")
 
 def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
     '''
@@ -507,7 +601,7 @@ def newtons(F, J, x, d, n, A, eps=TOL_NEWTON):
         else:
             inv = np.linalg.pinv(jac)
             delta = np.matmul(inv,-F_value)
-        # constrain maximum step size (did i do this right?????????)
+        # constrain maximum step size 
         delt_norm = np.linalg.norm(delta)
         if delt_norm > MAX_STEP_NEWTON:
             delta = delta*(MAX_STEP_NEWTON/delt_norm) # scale to max step size
@@ -751,6 +845,7 @@ def test_hc_rigid_clusters(start_n, end_n):
                 first_rigid.append(cluster)
                 cond_1.append(np.linalg.cond(R[0]))
             elif rigid == 2:
+                #print("PSS CLUSTER:", cluster)
                 pre_stress.append(cluster)
                 cond_pre.append(np.linalg.cond(R[0]))
                 # test svd
@@ -843,8 +938,10 @@ def test_manifold(n):
     c1, c2 = clusters[0], clusters[1]
     # make a 1-dimensional manifold first
     R1,A1 = rigidity_matrix(c1,d,n)
-    # print(R1)
-    # print("\nInitial null space:", linalg.null_space(R1))
+    print("\nA =", np.array(A1))
+    print(R1)
+    print("\nInitial null space:", linalg.null_space(R1))
+    print("\nLeft null space:", linalg.null_space(R1.T))
     R1 = np.delete(R1,0,0)
     # print("\nAfter row del:", R1)
     # print("\nNew null space:", linalg.null_space(R1))
@@ -891,7 +988,7 @@ def test_misc():
 
     test_A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
 
-    test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
+    #test_x = [random.randint(1,10) for coord in range(test_d*test_n)] #vector dimension  dn
     test_x = [0.0000000000000000,0.0000000000000000,0.0000000000000000,0.5555555555555556, \
         1.2830005981991683,0.9072184232530289,1.0000000000000000,-0.0000000000000000,-0.0000000000000000, \
         1.3333333333333333,0.7698003589195010,0.5443310539518174,0.5000000000000000,0.8660254037844386, \
@@ -922,15 +1019,15 @@ if __name__ == '__main__':
 
 
     print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
-    #test_hc_rigid_clusters(6,10)
+    test_hc_rigid_clusters(11, 12)
 
-    print("\nTest a non-rigid cluster!")
-    #test_hypercube()
+    # print("\nTest a non-rigid cluster!")
+    # test_hypercube()
 
-    print("\nTest other rigid structures:")
-    #test_simplex()
+    # print("\nTest other rigid structures:")
+    # test_simplex()
 
-    print("\nTest projection") # must pass in np arrays - so check for this
+    #print("\nTest projection") # must pass in np arrays - so check for this
     b=np.array([1,2,2])
     # A = np.array([[1,1],[1,2],[1,3]]).T
     # #b = [1,2,2]
@@ -942,7 +1039,19 @@ if __name__ == '__main__':
     # x, res, rank, s, = np.linalg.lstsq(A,b)
     # print(np.matmul(A,x))
 
-    test_manifold(0)
+    #print("\nManifold algorithm:")
+    #test_manifold(0)
+
+    # print("\nSemidefinite testing:")
+    # pss1 = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
+    # pss2 = [0.5, 1.4433756729740643, 0.816496580927726, 0.5, 0.2886751345948129, 1.632993161855452, -0.0, -0.0, -0.0, 1.0, -0.0, 0.0, 0.5, 0.8660254037844386, 0.0, 0.5, -0.2886751345948129, 0.816496580927726, 0.0, 0.5773502691896257, 0.816496580927726, 1.0, 0.5773502691896257, 0.816496580927726]
+    # pss3 = [-0.0, 0.0, -0.0, 1.0, 0.5773502691896257, 1.632993161855452, 1.5, 0.8660254037844386, 0.0, 1.0, 0.0, -0.0, 0.5, 0.8660254037844386, 0.0, 1.5, 0.2886751345948129, 0.816496580927726, 1.0, 1.1547005383792515, 0.816496580927726, 0.5, 0.2886751345948129, 0.816496580927726]
+    # R, A = rigidity_matrix(pss1, 3, 8)
+    # left_null = linalg.null_space(R.T).T
+    # # print('left null:', left_null)
+    # omega = omega(left_null[0], A, 3)
+    # print("shape of omega:", omega.shape)
+    # print(omega)
 
     # print("\nSecond moments of clusters:")
     # for n in range(11,12):
