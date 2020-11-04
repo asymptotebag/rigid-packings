@@ -501,7 +501,7 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
     '''
     # print(right_null) 
     failed_newtons = []
-    basis = []
+    basis = np.empty((0,d*n)) # what are the dims here?
     for v_j in right_null.T: # extracts the "vertical" basis vectors
         #print("v_j =", v_j)
         for sign in ['+','-']:
@@ -539,16 +539,19 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
                 # projection matrix P = A(A.T A)^-1 A.T
                 if len(basis) == 0:
                     print("size of added:", (tanv_plus/np.linalg.norm(tanv_plus)).shape)
-                    basis.append(tanv_plus/np.linalg.norm(tanv_plus))
+                    #basis.append(tanv_plus/np.linalg.norm(tanv_plus))
+                    basis = np.append(basis, [tanv_plus/np.linalg.norm(tanv_plus)], axis = 0)
                 else:
                     # print("tanv_plus =", tanv_plus)
+                    #print("basis =", basis)
                     proj = projection(tanv_plus,basis).T # this probably needs to be basis.T
                     # print("proj =", proj)
                     # print("proj.T =", proj.T)
                     orthonorm = tanv_plus - proj # orthogonal portion to the projection - check this
                     if np.linalg.norm(orthonorm) > ORTH_TOL:
                         print("size:", (orthonorm/np.linalg.norm(orthonorm)).shape)
-                        basis.append(orthonorm/np.linalg.norm(orthonorm))
+                        #basis.append(orthonorm/np.linalg.norm(orthonorm))
+                        basis = np.append(basis, orthonorm/np.linalg.norm(orthonorm), axis = 0)
     #print("basis =", basis)
     return (len(basis), basis)
 
@@ -561,6 +564,7 @@ def projection(v, A):
     '''
     Projects vector v onto the column space of A (using the SVD of A).
     '''
+    #print("A =", A)
     A = np.array(A).T
     print("dimensions of A:", A.shape)
     
@@ -884,6 +888,7 @@ def test_hc_rigid_clusters(start_n, end_n):
     print("\nAvg cond of first-order R(x):", np.mean(cond_1))
     print("\nAvg cond of pre-stress R(x):", np.mean(cond_pre))
     print("\nAvg cond of |W| = 0 R(x):", np.mean(cond_w0))
+    return pre_stress
 
 def test_numerical(start_n,end_n):
     d = 3
@@ -1019,7 +1024,14 @@ if __name__ == '__main__':
 
 
     print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
-    test_hc_rigid_clusters(11, 12)
+    n = 11
+    hypos = test_hc_rigid_clusters(11, 12)
+    dimensions = []
+    for cluster in hypos:
+        R, A = rigidity_matrix(cluster, 3, n)
+        dimensions.append(numerical_dim(cluster, 3, n, A, linalg.null_space(R))[0])
+    print("\nDIMENSIONS FOR N=11 HYPOSTATICS:")
+    print(dimensions)
 
     # print("\nTest a non-rigid cluster!")
     # test_hypercube()
