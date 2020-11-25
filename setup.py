@@ -4,9 +4,10 @@ import math
 import numpy as np
 from scipy import linalg
 from scipy import optimize
-from pynauty import * #please figure out how to use this
+import pynauty #please figure out how to use this
 import cvxpy as cvx
 import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
 
 # GLOBAL VARIABLES
 ADJACENCY_TOL = 1e-5
@@ -169,15 +170,17 @@ def adj_matrix(x,d,n, A = [], returnA = True):
             A.append(new_row)
     return A
 
-def system_eqs(x, d, n, A):
+def system_eqs(x, d, n, A, tol = 1e-6):
     '''
     Given cluster coordinates x (vector sized nd) and its adjacency matrix, return a vector with elements
     corresponding to all contacts (where A[i][j]=1) and whether the current coordinates (since this is used
     when x has been perturbed) still fulfill the original equation. Element is 0 if a contact still holds; 
     otherwise, it is the distance between them. 
+    Length is the number of contacts (e.g. 3n-6) + d(d+1)/2 for the constrained vertices.
     *** Should an error be raised if the distance is negative? (spheres can't intersect)
     '''
     distances = []
+    overlaps = 0
     for i in range(len(A)):
         #print("i =",i)
         for j in range(i+1, len(A[0])): 
@@ -189,13 +192,29 @@ def system_eqs(x, d, n, A):
                 for k in range(d):
                     norm += (x[d*i+k] - x[d*j+k])**2
                 #print("norm =", norm)
-                if norm - 1 < 1e-6: 
+                norm = math.sqrt(norm)
+                if norm - 1 < -1e-14:
+                    #print('overlap sphere', i, '&', j, ':', norm-1)
+                    overlaps += 1
+                if -1e-13 < norm - 1 < tol: 
                     distances.append(0) # contact is still present
                 else:
                     distances.append(norm - 1)
     distances += [0 for constraint in range(int(d*(d+1)/2))]
+    print(overlaps, "overlaps")
+    #print("system_eqs() returns", distances)
     return np.array(distances)
     #return np.array(distances).T
+
+def newton_system(x0, x, d, n, A, v_j):
+    distances = system_eqs(x, d, n, A)
+    orth_test = np.inner(np.array(x) - np.array(x0), v_j)
+    # if abs(orth_test) < ORTH_TOL:
+    #     orth = 0
+    # else:
+    #     orth = orth_test
+    # print("inner prod =", orth)
+    return np.append(distances,orth_test)
 
 def rigidity_matrix(x, d, n, A = [], returnA = True):
     # can iterate through adjacency matrix A and look for 1s (indicate contacts)
@@ -499,7 +518,9 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
     is_rigid(). right_null must be nonempty (or this function would not have been called).
     Return estimated dimension of cluster.
     '''
+    print("\nfinding numerical dim...")
     # print(right_null) 
+    print("starting x:", x)
     failed_newtons = []
     basis = np.empty((0,d*n)) # what are the dims here?
     for v_j in right_null.T: # extracts the "vertical" basis vectors
@@ -511,20 +532,20 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
             else:
                 x_plus = [coord - INITIAL_STEP_SIZE*v for coord, v in zip(x, v_j)]
 
-            # project onto constraints
-            #print("x =", x)
-            #print("xplus =", x_plus)
-            projx_plus, iters_plus = newtons(system_eqs, rigidity_matrix, x_plus, d, n, A) #hello what are F and J????
-            
-            print("iterations =", iters_plus)
-            print(system_eqs(x_plus,d,n,A))
+            # project onto constraints with newtons(F, J, x, d, n, A, v_j, eps=TOL_NEWTON)     
+            projx_plus, iters_plus = newtons(newton_system, rigidity_matrix, x_plus, d, n, A, v_j, graph=True) 
+            graph(x,projx_plus,'Projection in num dim method')
+            #print("\nanalytic method returns", is_rigid())
             if iters_plus == -1:
                 # exceeded maximum iterations
                 failed_newtons.append((v_j, 'exceeded iters on ' + sign))
-                break
+                raise RuntimeError("Newton's method did not converge")
             if np.inner(projx_plus - x_plus, v_j) > ORTH_TOL: 
                 # i have no idea if this is the right tolerance value to use!!!
                 # require (proj_x - x_plus) perpendicular to v_j --> inner product is zero
+                #raise RuntimeError("Newton result not orthogonal")
+                print("inner product is", np.inner(projx_plus - x_plus, v_j))
+                print("Newton result not orthogonal\n\n")
                 failed_newtons.append((v_j, 'newton result was not orth for ' + sign))
 
             # projx_plus = optimize.root(system_eqs, x_plus, args=(x,d,n,[],True), method='krylov', jac=rigidity_matrix, tol=TOL_NEWTON, callback=None, options=None)
@@ -532,7 +553,14 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
             # assuming x, projx, are both np vectors/arrays:
             tanv_plus = projx_plus - x
             norm_plus = np.linalg.norm(tanv_plus)
-            if norm_plus > X_TOL_MAX or norm_plus < X_TOL_MIN:
+            #print("distance from original =", norm_plus)
+            #print("tanv_plus = projx_plus - x =", tanv_plus)
+            if False and (norm_plus > X_TOL_MAX or norm_plus < X_TOL_MIN):
+                if norm_plus > X_TOL_MAX:
+                    print("too big:", norm_plus)
+                else:
+                    print("too small")
+                print("rejecting vector")
                 pass # reject vector (aka do nothing / skip it)
             else:
                 # project onto current estimate of B
@@ -553,19 +581,15 @@ def numerical_dim(x, d, n, A, right_null): # if is_rigid returned 0 or -1
                         #basis.append(orthonorm/np.linalg.norm(orthonorm))
                         basis = np.append(basis, orthonorm/np.linalg.norm(orthonorm), axis = 0)
     #print("basis =", basis)
+    print("exit numerical_dim()\n")
     return (len(basis), basis)
-
-# optimize.newton(func, x0, fprime=None, args=(), tol=TOL_NEWTON, maxiter=50, fprime2=None, 
-#   x1=None, rtol=0.0, full_output=False, disp=True)
-
-# optimize.root(fun, x0, args=(), method='hybr', jac=None, tol=None, callback=None, options=None)
 
 def projection(v, A):
     '''
     Projects vector v onto the column space of A (using the SVD of A).
     '''
-    #print("A =", A)
-    A = np.array(A).T
+    print("A =", A)
+    A = np.array(A)
     print("dimensions of A:", A.shape)
     
     # if len(A.shape) == 1: # basis only has 1 vector in it
@@ -580,11 +604,16 @@ def projection(v, A):
     # project = np.matmul(proj_matrix, v)
     v = v[:,None]
     print("dimensions of v:", v.shape)
-    x, res, rank, s, = np.linalg.lstsq(A,v,rcond=None)
-    project = np.matmul(A, x)
+    try:
+        x, res, rank, s, = np.linalg.lstsq(A,v,rcond=None)
+        project = np.matmul(A, x)
+    except:
+        x, res, rank, s, = np.linalg.lstsq(A.T,v,rcond=None)
+        project = np.matmul(A.T, x)
+    #project = np.matmul(A, x)
     return project
 
-def newtons(F, J, x, d, n, A, eps=TOL_NEWTON): 
+def newtons(F, J, x, d, n, A, v_j, eps=TOL_NEWTON, graph = False): 
     """
     Solve nonlinear system F=0 by Newton's method.
     J is the Jacobian of F. Both F and J must be functions of x.
@@ -592,14 +621,30 @@ def newtons(F, J, x, d, n, A, eps=TOL_NEWTON):
     until ||F|| < eps.
     Step size per iteration limited by MAX_STEP_NEWTON.
     """
-    F_value = F(x, d, n, A) # need F(x, d, n, A)
-    print("F_value =", F_value)
-    F_norm = np.linalg.norm(F_value, ord=2)  # l2 norm of vector
+    print("\nBegin Newton's:\n")
+    # F method: newton_system(x0, x, d, n, A, v_j)
+    x0 = x[:] # initial value, for use in calculating orthogonality 
+    F_value = F(x0, x, d, n, A, v_j) # need system_eqs(x, d, n, A)
+    #print("F_value =", F_value)
+    inn_prod = None # initialize to None?
+    dist_from_orig = [0]
+    F_norm = np.linalg.norm(F_value[:-1], ord=2)  # l2 norm of vector
     iteration_counter = 0
-    print("l2 norm of vector =", abs(F_norm))
-    while abs(F_norm) > eps and iteration_counter < 100:
-        jac = J(x, d, n, A, False)
-        #print("size:", jac.shape)
+    print("\nin newton's, F_norm =", abs(F_norm))
+    while iteration_counter < 120 and (abs(F_norm) > eps or (iteration_counter < 95 and (inn_prod is None or abs(inn_prod) > ORTH_TOL))): 
+        # test for np.inner(projx_plus - x_plus, v_j) > ORTH_TOL
+        #inner = np.inner(np.array(x)-np.array(x0),v_j)
+        #print("np.inner =", inner)
+        using_inner = True
+        if iteration_counter >= 95 or (inn_prod is None or inn_prod == 0.0):
+            using_inner = False
+            jac = J(x, d, n, A, False)
+            F_value = F_value[:-1]
+        else:
+            direction = [2*v_j[i]*inn_prod for i in range(len(x))]
+            jac = np.append(J(x, d, n, A, False), [direction], axis = 0)
+        #print(jac)
+        print("size of J:", jac.shape)
         if jac.shape[0] == jac.shape[1]: #square matrix
             delta = np.linalg.solve(jac, -F_value)
         else:
@@ -607,78 +652,153 @@ def newtons(F, J, x, d, n, A, eps=TOL_NEWTON):
             delta = np.matmul(inv,-F_value)
         # constrain maximum step size 
         delt_norm = np.linalg.norm(delta)
+        print("delt norm =", delt_norm)
         if delt_norm > MAX_STEP_NEWTON:
             delta = delta*(MAX_STEP_NEWTON/delt_norm) # scale to max step size
+        #print("delt norm after =", np.linalg.norm(delta))
+        #print("delta =", delta)
         x = x + delta
-        F_value = F(x, d, n, A)
-        F_norm = np.linalg.norm(F_value, ord=2)
+        #print("updated x =", x)
+        F_value = F(x0, x, d, n, A, v_j)
+        inn_prod = F_value[-1]
+        print("inner product =", inn_prod)
+        F_norm = np.linalg.norm(F_value[:-1], ord=2)
+        print("F_norm is now", F_norm, "at iteration", iteration_counter)
         iteration_counter += 1
+        #print("cluster =", x)
+        dist_from_orig.append(np.linalg.norm(x-x0))
+        #print("dist from original =", np.linalg.norm(x-x0))
+    if graph:
+        fig = plt.figure()
+        plt.plot(dist_from_orig)
+        plt.show()
 
+    print("exit newton's w/ F_norm =", F_norm, "& inner product =", inn_prod, "after", iteration_counter, "iterations\n")
     # Here, either a solution is found, or too many iterations
     if abs(F_norm) > eps:
         iteration_counter = -1
+    print("length of x:", len(x))
     return x, iteration_counter
 
 # MOVING ALONG ONE-DIMENSIONAL MANIFOLD
 
-def within_tol(x,d,n,A,broken,tol=INITIAL_ADJACENCY_TOL):
+def combos(contacts,n):
     '''
-    Return bool based on whether 2 spheres are now adjacent (??)
+    Return all combinations of numbers in range [0, size) of size n.
+    Need to pass in contacts as list(range(size)).
+    '''
+    if n == 0:
+        return [[]]
+    lis = []
+    #contacts = [i for i in range(size)]
+    for i in range(len(contacts)):
+        stud = contacts[i]
+        rest = contacts[i+1:]
+        for subcombo in combos(rest, n-1):
+            lis.append([stud] + subcombo)
+    return lis
+
+def within_tol(x,d,n,len_broken,tol=INITIAL_ADJACENCY_TOL):
+    '''
+    Return bool based on whether 2 spheres initially not in contact are within some tolerance 1 + tolA0
+    len_broken (int) is the length of the broken (1d manifold) cluster we're working with.
     broken is a list of indices that correspond to broken contacts (should only be 1 at a time).
     '''
-    contacts = system_eqs(x,d,n,A)
-    for i in range(len(contacts)):
-        if i in broken and contacts[i] < tol:
-            return i # so return index corresponding to which thing was re-contacted?
+    updated_A = adj_matrix(x, d, n)
+    print(np.array(updated_A))
+    contacts = system_eqs(x,d,n,updated_A, tol)
+    print("# of contacts in within_tol:", len(contacts))
+    if len(contacts) > len_broken: # new contact found between spheres
+        return updated_A # does this make sense to return?
+    # for i in range(len(contacts)):
+    #     if i in broken and contacts[i] < tol:
+    #         return i # so return index corresponding to which thing was re-contacted?
     return None #nothing is within tolerance (default)
 
+def update_A(A, breaks):
+    '''
+    Change 1s to 0s in the A matrix at all indices in breaks (a list, e.g. [0,3,7]). 
+    Shouldn't mutate input.
+    '''
+    newA = np.copy(A)
+    index = 0 # index counter
+    for i in range(len(newA)):
+        for j in range(i+1, len(newA[0])): 
+            if newA[i][j] == 1 and index in breaks:
+                newA[i][j] = 0 # contact removed
+                newA[j][i] = 0
+            index += 1
+    return newA
 
-def manifold(x0, d, n, A, basis):
+def manifold(x0, d, n, A, breaks, basis):
     '''
     Method called only if we have a 1D solution set.
     Input: basis is np matrix B, calculated in numerical dimension method.
+    A is the (initial) adjacency matrix
+    breaks (list) is a list of the indices of the contact(s) that were broken to create the manifold.
     '''
-    x = x0 # make a copy since we're mutating x
+    print("\nSTART OF MANIFOLD()")
+    print("basis =", basis)
+    x = x0[:] # make a copy since we're mutating x
     dirs = [] # directions for which contacts increase - may change to set
-    broken = {} # map {contact # : distance}
-    contacts = system_eqs(x,d,n,A) # some should be != 0
-    for i in range(len(contacts)):
-        if contacts[i] != 0:
-            broken[i] = contacts[i]
+    contacts = system_eqs(x,d,n,A) # initially, should all = 0
+    len_broken = len(contacts)
+    #print("\nORIGINAL CONTACTS =", contacts)
+    print("size of orig contacts =", len_broken)
+
     #for vec in basis.T:
     for vec in basis:
-        new_contacts = system_eqs(x + INITIAL_STEP_SIZE*vec,d,n,A)
-        increased = True
-        for contact in broken:
-            if new_contacts[contact] <= broken[contact]:
-                increased = False
+        new_contacts_plus = system_eqs(x + 2*INITIAL_STEP_SIZE*vec,d,n,A) # some should be != 0
+        new_contacts_minus = system_eqs(x - 2*INITIAL_STEP_SIZE*vec,d,n,A)
+        # print("\nNEW CONTACTS (+) =", new_contacts_plus)
+        # print("\nNEW CONTACTS (-) =", new_contacts_minus)
+        # print("size of new contacts =", len(new_contacts_minus))
+        for broken_i in breaks:
+            print("broken_i =", broken_i)
+            #print(new_contacts_minus[broken_i])
+            if new_contacts_plus[broken_i] > 0: # at least 1 broken contact increased (should it be all?)
+                print("value =", new_contacts_plus[broken_i])
+                print("\ncontact (+) increased in length!!")
+                dirs.append(vec)
                 break
-        if increased:
-            dirs.append(vec) # added only if the direction makes ALL contacts increase
-    
-    
+            if new_contacts_minus[broken_i] > 0:
+                print("value =", new_contacts_minus[broken_i])
+                print("\ncontact (-) increased in length!!")
+                dirs.append(vec)
+                break
+
+    if len(dirs) == 0:
+        print("\nCouldn't find any dirs to increase length")
+        return
+
+    for direc in dirs[:]:
+        dirs.append(-1*direc)
+
+    # len_broken = len(contacts) - len(breaks)
+    print(len(dirs), 'directions')
+    print("len_broken =", len_broken)
+    #A = adj_matrix(x, d, n)
     for v_k in dirs:
         v = v_k # update this as you go
         prev_step = x # used for when we backtrack 1 step at the end
         step_count = 0
-        # create new for loop here / or while loop testing for tolerance btwn spheres
-        while within_tol(x,d,n,A,broken) is None: # stop when you get 2 spheres close enough
-            print("in first loop")
+        print("\nIterating through dirs:")
+        while (step_count == 0 or within_tol(x,d,n,len_broken) is None) and step_count < 200: # stop when you get 2 spheres close enough
             step_count += 1
-
+            print("v =", v)
             # take step in tangent direction, along manifold
             step = [coord + 2*INITIAL_STEP_SIZE*v for coord, v in zip(x, v)] # is it vector x we're adding to?
-            
+            print('\nNEW POSITION:\n', step)
             # project back onto manifold
-            step, iters = newtons(system_eqs, rigidity_matrix, step, d, n, A)
+            step, iters = newtons(newton_system, rigidity_matrix, step, d, n, A, v)
             if iters == -1: #newton's failed
                 raise KeyboardInterrupt
-            newR = rigidity_matrix(step, d, n, A, False)
-            #newR = rigidity_matrix(step, d, n)
+            #newR = rigidity_matrix(step, d, n, A, False)
+            newR, A = rigidity_matrix(step, d, n)
             right_null = linalg.null_space(newR) # if right_null = [] the dimension decreased: should break
             print("right null:", right_null)
             print("v:", v)
-            v = projection(v, right_null)
+            v = projection(v, right_null).T[0] # check syntax - outputs something like [[]]
             prev_step = x # save prev position
             x = step # update current position
 
@@ -686,7 +806,7 @@ def manifold(x0, d, n, A, basis):
             if step_count == 1:
                 dim = is_rigid((newR, A), d, n)
                 if dim[0] == 0 or dim[0] == -1: # analytic method didn't work
-                    dim = numerical_dim(x, d, n, A, dim[1])
+                    dim = numerical_dim(x, d, n, A, dim[1])[0]
                 else:
                     dim = dim[0] # only keep the number
                     if dim == 1 or dim == 2:
@@ -697,43 +817,70 @@ def manifold(x0, d, n, A, basis):
                 if dim > 1:
                     return -1 # stop moving, dim increased
                 elif dim < 1:
-                    break # does this mean we moved back to the original??
+                    print("breaking")
+                    print("current x =", x)
+                    print("distance btwn =", np.linalg.norm(x-x0))
+                    return # does this mean we moved back to the original??
+                #raise RuntimeError
+        print("distance between =", np.linalg.norm(x-x0))
+        graph(x0,x,'Manifold method, larger steps')
 
         x = prev_step # back up 1 step
-
+        
         # repeat continuation with smaller step size
-        while within_tol(x,d,n,A,broken) is None: # stop when you get 2 spheres close enough, again
-            print("doing final round")
+        while within_tol(x,d,n,len_broken) is None: # stop when you get 2 spheres close enough, again
+            print("\ndoing final round after", step_count, "steps")
             #step_count += 1
             # take step in tangent direction, along manifold
-            step = [coord + STEP_SIZE*v for coord, v in zip(x, v)]
-            
+            step = [coord + STEP_SIZE*v for coord, v in zip(x, v)] # getting ragged nested arrays here
+            print("step =", step)
             # project back onto manifold
-            step, iters = newtons(system_eqs, rigidity_matrix, step, d, n, A)
+            step, iters = newtons(newton_system, rigidity_matrix, step, d, n, A, v)
             if iters == -1: #newton's failed
-                raise KeyboardInterrupt
-            newR = rigidity_matrix(step, d, n, A, False)
+                raise ValueError("projection (newton's) failed")
+            newR, A = rigidity_matrix(step, d, n)
             right_null = linalg.null_space(newR)
             v = projection(v, right_null)
             #prev_step = x
             x = step # update current position
         
+        graph(x0,x,'Manifold method, smaller steps')
+        print("\nGot 2 spheres close enough")
         # Then, we project onto this new set of constraints and check if the cluster is rigid, 
         # using a new tolerance tolA to determine whether two spheres are adjacent.
-        proj_final, iters = newtons(system_eqs, rigidity_matrix, x, d, n, A)
+        proj_final, iters = newtons(newton_system, rigidity_matrix, x, d, n, A, v)
         if iters == -1: # projection failed
             '''
             delete subsets of the new constraints until the projection succeeds
             '''
-            pass
+            raise NotImplementedError("delete subsets of the new constraints")
         finalR = rigidity_matrix(proj_final,d,n,A)
-        final_rigidity = is_rigid(finalR,d,n)
+        final_rigidity = is_rigid(finalR,d,n)[0]
+        print("final rigidity =", final_rigidity)
         # implement numerical method here?
         if final_rigidity == 1 or final_rigidity == 2:
             # new cluster found!
             # change implementation later
             return proj_final
 
+def graph(x1, x2, title=''):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    x1s, y1s, z1s, x2s, y2s, z2s = [], [], [], [], [], []
+    for i in range(0,len(x1),3):
+        x1s.append(x1[i])
+        y1s.append(x1[i+1])
+        z1s.append(x1[i+2])
+        x2s.append(x2[i])
+        y2s.append(x2[i+1])
+        z2s.append(x2[i+2])
+    ax.scatter(x1s, y1s, z1s, c='red')
+    ax.scatter(x2s, y2s, z2s, c='blue')
+    ax.set_title(title)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    plt.show()
 
 # TEST FUNCTIONS
 
@@ -824,7 +971,8 @@ def test_hc_rigid_clusters(start_n, end_n):
     not_rigid = [] #(0)
     idk = [] #can't be determined (-1)]
     hypostatic = [] # contacts < 3n-6
-    hypo_stress = [] #hypostatic & pre-stress (should be all of them?)
+    hyperstatic = []
+    #hypo_stress = [] #hypostatic & pre-stress (should be all of them?)
     cond_1 = [] # condition numbers of first-order matrices
     cond_pre = [] # cond of pre-stress stable
     cond_w0 = [] # cond of matrices where |W| = 0
@@ -869,6 +1017,8 @@ def test_hc_rigid_clusters(start_n, end_n):
             if contacts < d*n - 6:
                 hypostatic.append(cluster)
                 #hypo_rigid = rigid
+            elif contacts > d*n - 6:
+                hyperstatic.append(cluster)
             #assert rigid != 0 # these all should be rigid
             #print("\n")
 
@@ -880,15 +1030,15 @@ def test_hc_rigid_clusters(start_n, end_n):
 
     print("\nFor hypostatic clusters:")
     print("# of hypostatic clusters:", len(hypostatic))
-    print("# of pre-stress stable hypostatics:", len(hypo_stress))
-    print("Hypostatic clusters:")
-    print(hypostatic)
+    #print("# of pre-stress stable hypostatics:", len(hypo_stress))
+    #print("Hypostatic clusters:")
+    #print(hypostatic)
     #print("hypostatic cluster has rigidity value", hypo_rigid)
 
     print("\nAvg cond of first-order R(x):", np.mean(cond_1))
     print("\nAvg cond of pre-stress R(x):", np.mean(cond_pre))
     print("\nAvg cond of |W| = 0 R(x):", np.mean(cond_w0))
-    return pre_stress
+    return hypostatic
 
 def test_numerical(start_n,end_n):
     d = 3
@@ -939,22 +1089,44 @@ def moments(n):
 def test_manifold(n):
     n = 6
     d = 3
-    clusters = parse_coords(6) # 2 clusters for n=6
-    c1, c2 = clusters[0], clusters[1]
-    # make a 1-dimensional manifold first
-    R1,A1 = rigidity_matrix(c1,d,n)
-    print("\nA =", np.array(A1))
-    print(R1)
-    print("\nInitial null space:", linalg.null_space(R1))
-    print("\nLeft null space:", linalg.null_space(R1.T))
-    R1 = np.delete(R1,0,0)
-    # print("\nAfter row del:", R1)
-    # print("\nNew null space:", linalg.null_space(R1))
-    lenB, B = numerical_dim(c1,d,n,A1,linalg.null_space(R1))
-    print("\nsize of B =", lenB)
-    print(B)
-    new_c = manifold(c1,d,n,A1,B)
-    print(new_c)
+    #manifold_breaks = []
+    #to_break = combos(list(range(n*d - 6)),1)
+    to_break = [[9]]
+    #to_break = [[x] for x in range(12)]
+    no_manifold = []
+    for breaks in to_break:
+        clusters = parse_coords(6) # 2 clusters for n=6
+        c1, c2 = clusters[0], clusters[1]
+        # print("distance between =", np.linalg.norm(np.array(c1)-np.array(c2)))
+        # break
+        # make a 1-dimensional manifold first
+        R1,A1 = rigidity_matrix(c1,d,n)
+        print(np.array(A1))
+        #print(R1)
+        # print("\nInitial null space:", linalg.null_space(R1))
+        # print("\nLeft null space:", linalg.null_space(R1.T))
+        for broken_i in breaks:
+            R1 = np.delete(R1,broken_i,0)
+        print("size of R after rowdel:", R1.shape)
+        A1 = update_A(A1, breaks)
+        print("after deleting:\n", A1)
+        # print("\nAfter row del:", R1)
+        # print("\nNew null space:", linalg.null_space(R1))
+        #A1 = adj_matrix(c1,d,n)
+        lenB, B = numerical_dim(c1,d,n,A1,linalg.null_space(R1))
+        print("len(B) =", lenB)
+        if lenB == 1:
+            # print("\nsize of B =", lenB)
+            # print(B)
+            #manifold_breaks.append(breaks[0])
+            new_c = manifold(c1,d,n,A1,breaks,B)
+            print(new_c)
+        else:
+            print("no 1-dim manifold for breaks =", breaks)
+            no_manifold.append(breaks)
+    print("didn't work for", no_manifold)
+    
+    #print("indices that create 1d manifold:", manifold_breaks)
 
 def test_misc():
     
@@ -1022,16 +1194,17 @@ if __name__ == '__main__':
     # print("should be T for positive definite:", sign_def(pos_eigs))
     # print("should be F for this one:", sign_def(not_def))
 
-
     print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
     n = 11
-    hypos = test_hc_rigid_clusters(11, 12)
-    dimensions = []
-    for cluster in hypos:
-        R, A = rigidity_matrix(cluster, 3, n)
-        dimensions.append(numerical_dim(cluster, 3, n, A, linalg.null_space(R))[0])
-    print("\nDIMENSIONS FOR N=11 HYPOSTATICS:")
-    print(dimensions)
+    # hypos = test_hc_rigid_clusters(11, 12)
+    # print("hyperstatic:", hypers)
+    # print("# hyperstatic =", len(hypers))
+    # dimensions = []
+    # for cluster in hypos:
+    #     R, A = rigidity_matrix(cluster, 3, n)
+    #     dimensions.append(numerical_dim(cluster, 3, n, A, linalg.null_space(R))[0])
+    # print("\nDIMENSIONS FOR N=11 HYPERSTATICS:")
+    # print(dimensions)
 
     # print("\nTest a non-rigid cluster!")
     # test_hypercube()
@@ -1051,8 +1224,9 @@ if __name__ == '__main__':
     # x, res, rank, s, = np.linalg.lstsq(A,b)
     # print(np.matmul(A,x))
 
-    #print("\nManifold algorithm:")
-    #test_manifold(0)
+    print("\nManifold algorithm:")
+    test_manifold(0)
+    #print(combos(list(range(12)),2))
 
     # print("\nSemidefinite testing:")
     # pss1 = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
