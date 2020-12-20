@@ -1041,20 +1041,45 @@ def moments(n):
         moments.append(moment)
     return moments
 
+def max_contacts(n):
+    clusters = parse_coords(n)
+    max_conts = 0
+    max_clusters = []
+    for cluster in clusters: #cluster is x
+        R = rigidity_matrix(cluster, d, n)
+        contacts = 0
+        for i in range(len(R[1])):
+            for j in range(i+1, len(R[1][0])):
+                if R[1][i][j] == 1:
+                    contacts += 1
+        if contacts > max_conts:
+            max_conts = contacts
+            max_clusters = [cluster]
+        elif contacts == max_conts:
+            max_clusters.append(cluster)
+    return max_clusters
+
 def test_moments(p):
-    avgs = {} # dict of avgs
-    for n in range(6,9):
-        print("\nSpheres for n =", n)
+    for n in range(10,13):
+        print("\nn =", n)
         moms = moments(n)
-        avgs[n] = sum(moms)/len(moms)
-        #print(moms)
-        plt.hist(moms)
-        plt.xlabel('n = ' + str(n))
-        plt.ylabel(str(p) + ' moment')
-        #plt.show()
-        print("min =", min(moms))
-        #hist = [x for x in moms if 37.83<x<37.9]
-        #print(hist)
+        # print("avg =", sum(moms)/len(moms))
+        min_mom = min(moms)
+        print("min =", min_mom)
+        almost_min = 0
+        for mom in moms:
+            if 0 < mom - min_mom < 0.005*min_mom:
+                #print("almost:", mom)
+                almost_min += 1
+        print("# of almost min =", almost_min)
+        # print(moms)
+        # plt.hist(moms)
+        # plt.xlabel('n = ' + str(n))
+        # plt.ylabel(str(p) + ' moment')
+        # plt.show()
+        
+        # hist = [x for x in moms if 37.83<x<37.9]
+        # print(hist)
 
 def test_manifold(n):
     n = 6
