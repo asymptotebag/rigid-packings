@@ -1032,7 +1032,7 @@ def moments(n):
     
         moment = 0
         for coord in coords:
-            moment += 4 * (np.linalg.norm(np.array(coord) - np.array(center)) ** 2)
+            moment += (np.linalg.norm(np.array(coord) - np.array(center)) ** 2)
         # # specifically for n = 11:
         # if moment < 37.84:
         #     print("\nMin second moment cluster!")
@@ -1040,6 +1040,21 @@ def moments(n):
         #     print("moment =", moment)
         moments.append(moment)
     return moments
+
+def test_moments(p):
+    avgs = {} # dict of avgs
+    for n in range(6,9):
+        print("\nSpheres for n =", n)
+        moms = moments(n)
+        avgs[n] = sum(moms)/len(moms)
+        #print(moms)
+        plt.hist(moms)
+        plt.xlabel('n = ' + str(n))
+        plt.ylabel(str(p) + ' moment')
+        #plt.show()
+        print("min =", min(moms))
+        #hist = [x for x in moms if 37.83<x<37.9]
+        #print(hist)
 
 def test_manifold(n):
     n = 6
@@ -1091,7 +1106,18 @@ def test_misc():
     for num in nums:
         test_tree.insert(num)
     print(test_tree.inorder())
-    
+
+    clustree = bst()
+    cluster1 = cluster(adjv)
+    clustree.insert(cluster1)
+    print(clustree.inorder())
+
+    #test comparison operators - works
+    arr1 = np.array([0,0,0,1,0,1])
+    arr2 = np.array([0,1,0,1,0,1]) #arr1 < arr2
+    clus1 = cluster(arr1)
+    clus2 = cluster(arr2)
+    print(clus1<clus2)
     
     #test pynauty
     print("\nTESTING PYNAUTY\n")
@@ -1132,6 +1158,53 @@ def test_misc():
     #print(R)
     print(is_rigid(R,3,8))
 
+    print("\n\nTESTING SETUP FOR RIGIDITY\n")
+    r = []
+    for contact in range(test_m):
+        r.append([random.randint(1,10) for coord in range(test_d*test_n)])
+    test_r = np.array(r) #should be np 2d array
+    test_r = constrain(test_r, test_d, test_n)
+    print(test_r)
+    print(is_rigid(test_r, test_d, test_n))
+
+    # test if sign_def() works: it does work
+    pos_eigs = np.array([[2,-1,0],[-1,2,-1],[0,-1,2]])
+    not_def = np.array([[9,0,-8],[6,-5,-2],[-9,3,3]])
+    print("should be T for positive definite:", sign_def(pos_eigs))
+    print("should be F for this one:", sign_def(not_def))
+
+    print("\nTest projection") # must pass in np arrays - so check for this
+    b=np.array([1,2,2])
+    A = np.array([[1,1],[1,2],[1,3]]).T
+    #b = [1,2,2]
+    # A = [[1,1],[1,2],[1,3]]
+    print(projection(b,A))
+
+    A = np.array([[1,1],[1,2],[1,3]])
+    b = b[:,None]
+    x, res, rank, s, = np.linalg.lstsq(A,b)
+    print(np.matmul(A,x))
+
+    hypo_sample = [0.0, 0.0, 0.0, 1.0, 1e-16, 1e-16, -0.5000000000000001, 0.8660254037844386, 7.2894146e-09, 1.0000000033065455, 1.6037507496579957, 0.4536092048770559, 0.9999999940482179, 0.5773502657533626, -0.8164965833575311, -3.9678548e-09, 1.5396007262783127, -0.5443310398639957, 3.3065458e-09, 1.603750740716201, 0.4536092267089183, 0.999999996032145, 1.53960071554816, -0.5443310604312973, 1.5000000000000002, 0.8660254037844389, -7.2894148e-09, 0.5, 0.8660254037844386, -2e-16]
+    RA = rigidity_matrix(hypo_sample,3,10)
+    R, A = RA
+    u, s, vh = np.linalg.svd(R, full_matrices=True)
+    print(s)
+
+    print("\nRIGHT NULL\n")
+    print(is_rigid(RA,3,10))
+    right_null = linalg.null_space(R)
+    lenB = numerical_dim(hypo_sample,3,10,A,right_null)
+    print("Length of estimated basis:", lenB)
+    
+    A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
+    contacts = 0
+    for i in range(len(A)):
+        for j in range(i+1, len(A[0])):
+            if A[i][j] == 1:
+                contacts += 1
+    print("contacts:", contacts)
+
 
 if __name__ == '__main__':
     
@@ -1139,39 +1212,33 @@ if __name__ == '__main__':
 
     # print("\n\nTESTING FOR RIGIDITY\n")
 
-    # # test if sign_def() works: it does work
-    # pos_eigs = np.array([[2,-1,0],[-1,2,-1],[0,-1,2]])
-    # not_def = np.array([[9,0,-8],[6,-5,-2],[-9,3,3]])
-    # print("should be T for positive definite:", sign_def(pos_eigs))
-    # print("should be F for this one:", sign_def(not_def))
+    # print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
+    # n = 11
+    # hypos = test_hc_rigid_clusters(n, n+1)
+    # print("# hypostatic =", len(hypos))
+    # dimensions = []
+    # for cluster in hypos:
+    #     R, A = rigidity_matrix(cluster, 3, n)
+    #     dimensions.append(numerical_dim(cluster, 3, n, A, linalg.null_space(R))[0])
+    # print("\nDIMENSIONS FOR N=" + str(n) + " ISOSTATICS:")
+    # print(dimensions)
 
-    print("\n\nTEST CLUSTERS n=6 THROUGH 10\n")
-    n = 11
-    hypos = test_hc_rigid_clusters(n, n+1)
-    print("# hypostatic =", len(hypos))
-    dimensions = []
-    for cluster in hypos:
-        R, A = rigidity_matrix(cluster, 3, n)
-        dimensions.append(numerical_dim(cluster, 3, n, A, linalg.null_space(R))[0])
-    print("\nDIMENSIONS FOR N=" + str(n) + " ISOSTATICS:")
-    print(dimensions)
-
-    len0, len1, len2, failed = 0, 0, 0, 0
-    for dim in dimensions:
-        if dim == 0:
-            len0 += 1
-        elif dim == 1:
-            len1 += 1
-        elif dim == 2:
-            len2 += 1
-        elif dim == -1:
-            failed += 1
-        else:
-            raise RuntimeError(">:C")
-    print("# where len(B)=0:", len0)
-    print("# where len(B)=1:", len1)
-    print("# where len(B)=2:", len2)
-    print("# where Newton's didn't converge:", failed)
+    # len0, len1, len2, failed = 0, 0, 0, 0
+    # for dim in dimensions:
+    #     if dim == 0:
+    #         len0 += 1
+    #     elif dim == 1:
+    #         len1 += 1
+    #     elif dim == 2:
+    #         len2 += 1
+    #     elif dim == -1:
+    #         failed += 1
+    #     else:
+    #         raise RuntimeError(">:C")
+    # print("# where len(B)=0:", len0)
+    # print("# where len(B)=1:", len1)
+    # print("# where len(B)=2:", len2)
+    # print("# where Newton's didn't converge:", failed)
 
     # print("\nTest a non-rigid cluster!")
     # test_hypercube()
@@ -1179,26 +1246,16 @@ if __name__ == '__main__':
     # print("\nTest other rigid structures:")
     # test_simplex()
 
-    # print("\nTest projection") # must pass in np arrays - so check for this
-    # b=np.array([1,2,2])
-    # A = np.array([[1,1],[1,2],[1,3]]).T
-    # #b = [1,2,2]
-    # # A = [[1,1],[1,2],[1,3]]
-    # print(projection(b,A))
+    # print("\nTest numerical method")
+    # test_numerical(9, 10)
 
-    # A = np.array([[1,1],[1,2],[1,3]])
-    # b = b[:,None]
-    # x, res, rank, s, = np.linalg.lstsq(A,b)
-    # print(np.matmul(A,x))
 
-    print("\nManifold algorithm:")
-    #test_manifold(0)
-
-    # isit_rigid = [ 2.09998385e-17, -5.86670673e-18, -6.38256241e-18, -7.10751520e-01, 1.28300060e+00,  9.07218423e-01,  1.92943669e-01,  9.81209836e-01, 1.57418309e-17,  1.83118987e-02,  1.29644342e+00,  2.22904294e-01, -7.43795654e-01,  6.55833890e-01,  1.29034633e-01, -6.42485019e-02, 5.22208328e-01,  8.50394376e-01]
-    # R = rigidity_matrix(isit_rigid, 3, 6) # R = (R,A)
-    # rigid = is_rigid(R,3,6)[0]
-    # print("rigidity =", rigid)
+    # print("\nManifold algorithm:")
+    # test_manifold(0)
     #print(combos(list(range(12)),2))
+
+    print("\nTesting moments:")
+    test_moments(2)
 
     # print("\nSemidefinite testing:")
     # pss1 = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
@@ -1210,20 +1267,6 @@ if __name__ == '__main__':
     # omega = omega(left_null[0], A, 3)
     # print("shape of omega:", omega.shape)
     # print(omega)
-
-    # print("\nSecond moments of clusters:")
-    # for n in range(11,12):
-    #     print("\nSpheres for n =", n)
-    #     moms = moments(n)
-    #     #print(moms)
-    #     #plt.plot(moms)
-    #     plt.hist(moms)
-    #     plt.xlabel('n = ' + str(n))
-    #     plt.ylabel('second moment')
-    #     #plt.show()
-    #     print("min*4 =", min(moms))
-    #     hist = [x for x in moms if 37.83<x<37.9]
-    #     print(hist)
     
     # c1 = [1.3950617283950617, -0.1140444976177039, -1.0080204702811433, -0.2962962962962963, 0.8553337321327789, -0.604812282168686, 0.0, 0.0, 0.0, 0.5720164609053497, -0.1330519138873212, -1.7203549359464845, 1.0, -0.0, 0.0, 0.0987654320987654, 0.741289234515075, -1.6128327524498292, 1.3333333333333333, 0.769800358919501, -0.5443310539518174, 0.5555555555555556, 1.2830005981991683, -0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 1.0925925925925926, 0.6949586573578829, -1.5120307054217148, 0.5, 0.2886751345948129, -0.816496580927726]
     # c2 = [-0.2962962962962963, 0.8553337321327789, 0.604812282168686, 0.0987654320987654, 0.741289234515075, 1.6128327524498292, -0.0, -0.0, 0.0, 0.6584362139917695, -0.1900741626961731, 1.6800341171352386, 1.0, -0.0, 0.0, 1.3950617283950617, -0.1140444976177039, 1.0080204702811433, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, 1.3333333333333333, 0.769800358919501, 0.5443310539518174, 0.5, 0.2886751345948129, 0.816496580927726]
@@ -1238,49 +1281,5 @@ if __name__ == '__main__':
     # print("\nTOTAL NORM =", norm)
     # print("\nNORM =", norm_vec)
 
-    print("\nTest numerical method")
-    #test_numerical(9, 10)
-
-    # hypo_sample = [0.0, 0.0, 0.0, 1.0, 1e-16, 1e-16, -0.5000000000000001, 0.8660254037844386, 7.2894146e-09, 1.0000000033065455, 1.6037507496579957, 0.4536092048770559, 0.9999999940482179, 0.5773502657533626, -0.8164965833575311, -3.9678548e-09, 1.5396007262783127, -0.5443310398639957, 3.3065458e-09, 1.603750740716201, 0.4536092267089183, 0.999999996032145, 1.53960071554816, -0.5443310604312973, 1.5000000000000002, 0.8660254037844389, -7.2894148e-09, 0.5, 0.8660254037844386, -2e-16]
-    # RA = rigidity_matrix(hypo_sample,3,10)
-    # R, A = RA
-    # u, s, vh = np.linalg.svd(R, full_matrices=True)
-    # print(s)
-
-    # print("\nRIGHT NULL\n")
-    # print(is_rigid(RA,3,10))
-    # right_null = linalg.null_space(R)
-    # lenB = numerical_dim(hypo_sample,3,10,A,right_null)
-    # print("Length of estimated basis:", lenB)
     
-    # A = [[0,1,0,0,1,0],[1,0,1,0,1,0],[0,1,0,1,0,0],[0,0,1,0,1,1],[1,1,0,1,0,0],[0,0,0,1,0,0]]
-    # contacts = 0
-    # for i in range(len(A)):
-    #     for j in range(i+1, len(A[0])):
-    #         if A[i][j] == 1:
-    #             contacts += 1
-    # print("contacts:", contacts)
-    
-
-    # clustree = bst()
-    # cluster1 = cluster(adjv)
-    # clustree.insert(cluster1)
-    # print(clustree.inorder())
-
-    # #test comparison operators - works
-    # arr1 = np.array([0,0,0,1,0,1])
-    # arr2 = np.array([0,1,0,1,0,1]) #arr1 < arr2
-    # clus1 = cluster(arr1)
-    # clus2 = cluster(arr2)
-    # print(clus1<clus2)
- 
-
-    # print("\n\nTESTING SETUP FOR RIGIDITY\n")
-    # r = []
-    # for contact in range(test_m):
-    #     r.append([random.randint(1,10) for coord in range(test_d*test_n)])
-    # test_r = np.array(r) #should be np 2d array
-    # test_r = constrain(test_r, test_d, test_n)
-    # print(test_r)
-    # print(is_rigid(test_r, test_d, test_n))
     
