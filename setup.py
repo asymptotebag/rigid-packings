@@ -1022,7 +1022,32 @@ def test_numerical(start_n,end_n):
 def moments(clusters, n, p=2):
     d = 3
     moments = []
-    # min_mom = 100
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+        moment = 0
+        for coord in coords:
+            moment += sum([abs(coord[i] - center[i]) ** p for i in range(d)])
+        moments.append(moment)
+        # if moment <= 13.71957671958:
+        #     R = rigidity_matrix(cluster, 3, n)
+        #     contacts = 0
+        #     for i in range(len(R[1])):
+        #         for j in range(i+1, len(R[1][0])):
+        #             if R[1][i][j] == 1:
+        #                 contacts += 1
+        #     print("# contacts of min:", contacts)
+        #     break
+    return moments
+
+def min_moment(clusters, n, p=2):
+    d = 3
+    min_mom = 100
+    min_x = None
     for cluster in clusters:
         center = [0,0,0]
         coords = [cluster[3*i:3*i+3] for i in range(n)]
@@ -1034,6 +1059,9 @@ def moments(clusters, n, p=2):
         for coord in coords:
             moment += sum([abs(coord[i] - center[i]) ** p for i in range(d)])
             #moment += (np.linalg.norm(np.array(coord) - np.array(center)) ** 2)
+        if moment < min_mom:
+            min_mom = moment
+            min_x = cluster
         # if moment <= 13.71957671958:
         #     R = rigidity_matrix(cluster, 3, n)
         #     contacts = 0
@@ -1043,8 +1071,8 @@ def moments(clusters, n, p=2):
         #                 contacts += 1
         #     print("# contacts of min:", contacts)
         #     break
-        moments.append(moment)
-    return moments
+    print("min moment cluster:", min_x, "moment =", min_mom)
+    return min_x
 
 def max_contacts(n):
     clusters = parse_coords(n)
@@ -1068,16 +1096,16 @@ def test_moments(p=2): # p is the pth moment, default is 2nd
     for n in range(6,14):
         print("\nn =", n)
         clusters = parse_coords(n)
-        moms = moments(clusters, n, p)
-        print("avg =", sum(moms)/len(moms))
-        min_mom = min(moms)
-        print("min =", min_mom)
-        almost_min = 0
-        for mom in moms:
-            if 0 < mom - min_mom < 0.001*min_mom:
-                #print("almost:", mom)
-                almost_min += 1
-        print("# of almost min =", almost_min)
+        # moms = moments(clusters, n, p)
+        # print("avg =", sum(moms)/len(moms))
+        # min_mom = min(moms)
+        # print("min =", min_mom)
+        # almost_min = 0
+        # for mom in moms:
+        #     if 0 < mom - min_mom < 0.001*min_mom:
+        #         #print("almost:", mom)
+        #         almost_min += 1
+        # print("# of almost min =", almost_min)
 
         # max_clusters = max_contacts(n)
         # max_moments = moments(max_clusters, n, p)
@@ -1086,7 +1114,12 @@ def test_moments(p=2): # p is the pth moment, default is 2nd
 
         # Number of contacts of clusters of minimal p and almost minimal p moments.
 
-
+        # For each cluster with minimal p-moment report the q-moments for that cluster for q different than p.
+        min_x = min_moment(clusters, n, p)
+        for q in [1/2, 1, 2, 4]:
+            if p != q:
+                q_moment = moments([min_x], n, q)
+                print(q, 'moment =', q_moment)
         # print(moms)
         # plt.hist(moms)
         # plt.xlabel('n = ' + str(n))
@@ -1295,7 +1328,7 @@ if __name__ == '__main__':
     #print(combos(list(range(12)),2))
 
     print("\nTesting moments:")
-    test_moments(2)
+    test_moments(4)
 
     # print("\nSemidefinite testing:")
     # pss1 = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
