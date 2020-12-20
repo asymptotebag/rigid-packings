@@ -1019,9 +1019,10 @@ def test_numerical(start_n,end_n):
                 print("Length of estimated basis:", lenB)
                 print()
 
-def moments(n):
-    clusters = parse_coords(n)
+def moments(clusters, n, p=2):
+    d = 3
     moments = []
+    # min_mom = 100
     for cluster in clusters:
         center = [0,0,0]
         coords = [cluster[3*i:3*i+3] for i in range(n)]
@@ -1029,15 +1030,19 @@ def moments(n):
             center[0] += (1/n) * coord[0]
             center[1] += (1/n) * coord[1]
             center[2] += (1/n) * coord[2]
-    
         moment = 0
         for coord in coords:
-            moment += (np.linalg.norm(np.array(coord) - np.array(center)) ** 2)
-        # # specifically for n = 11:
-        # if moment < 37.84:
-        #     print("\nMin second moment cluster!")
-        #     print(cluster)
-        #     print("moment =", moment)
+            moment += sum([abs(coord[i] - center[i]) ** p for i in range(d)])
+            #moment += (np.linalg.norm(np.array(coord) - np.array(center)) ** 2)
+        # if moment <= 13.71957671958:
+        #     R = rigidity_matrix(cluster, 3, n)
+        #     contacts = 0
+        #     for i in range(len(R[1])):
+        #         for j in range(i+1, len(R[1][0])):
+        #             if R[1][i][j] == 1:
+        #                 contacts += 1
+        #     print("# contacts of min:", contacts)
+        #     break
         moments.append(moment)
     return moments
 
@@ -1046,7 +1051,7 @@ def max_contacts(n):
     max_conts = 0
     max_clusters = []
     for cluster in clusters: #cluster is x
-        R = rigidity_matrix(cluster, d, n)
+        R = rigidity_matrix(cluster, 3, n)
         contacts = 0
         for i in range(len(R[1])):
             for j in range(i+1, len(R[1][0])):
@@ -1059,19 +1064,29 @@ def max_contacts(n):
             max_clusters.append(cluster)
     return max_clusters
 
-def test_moments(p):
-    for n in range(10,13):
+def test_moments(p=2): # p is the pth moment, default is 2nd
+    for n in range(6,14):
         print("\nn =", n)
-        moms = moments(n)
-        # print("avg =", sum(moms)/len(moms))
+        clusters = parse_coords(n)
+        moms = moments(clusters, n, p)
+        print("avg =", sum(moms)/len(moms))
         min_mom = min(moms)
         print("min =", min_mom)
         almost_min = 0
         for mom in moms:
-            if 0 < mom - min_mom < 0.005*min_mom:
+            if 0 < mom - min_mom < 0.001*min_mom:
                 #print("almost:", mom)
                 almost_min += 1
         print("# of almost min =", almost_min)
+
+        # max_clusters = max_contacts(n)
+        # max_moments = moments(max_clusters, n, p)
+        # print(max_moments)
+        # print("avg of max moments =", sum(max_moments)/len(max_moments))
+
+        # Number of contacts of clusters of minimal p and almost minimal p moments.
+
+
         # print(moms)
         # plt.hist(moms)
         # plt.xlabel('n = ' + str(n))
