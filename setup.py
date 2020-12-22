@@ -1093,33 +1093,43 @@ def max_contacts(n):
     return max_clusters
 
 def test_moments(p=2): # p is the pth moment, default is 2nd
-    for n in range(6,14):
+    for n in range(14,15):
         print("\nn =", n)
         clusters = parse_coords(n)
-        # moms = moments(clusters, n, p)
+        moms = moments(clusters, n, p)
         # print("avg =", sum(moms)/len(moms))
         # min_mom = min(moms)
         # print("min =", min_mom)
         # almost_min = 0
         # for mom in moms:
-        #     if 0 < mom - min_mom < 0.001*min_mom:
+        #     if 0 < mom - min_mom < 0.01*min_mom:
         #         #print("almost:", mom)
         #         almost_min += 1
         # print("# of almost min =", almost_min)
 
-        # max_clusters = max_contacts(n)
-        # max_moments = moments(max_clusters, n, p)
-        # print(max_moments)
-        # print("avg of max moments =", sum(max_moments)/len(max_moments))
+        max_clusters = max_contacts(n)
+        for i, cluster in enumerate(max_clusters):
+            print(i+1, ":", cluster)
+        max_moments = moments(max_clusters, n, p)
+        print(max_moments)
+        print("avg of max moments =", sum(max_moments)/len(max_moments))
 
-        # Number of contacts of clusters of minimal p and almost minimal p moments.
+        # min_x = min_moment(clusters, n, p)
+        # # Number of contacts of clusters of minimal moment.
+        # R = rigidity_matrix(min_x, 3, n)
+        # contacts = 0
+        # for i in range(len(R[1])):
+        #     for j in range(i+1, len(R[1][0])):
+        #         if R[1][i][j] == 1:
+        #             contacts += 1
+        # print("# contacts:", contacts)
 
-        # For each cluster with minimal p-moment report the q-moments for that cluster for q different than p.
-        min_x = min_moment(clusters, n, p)
-        for q in [1/2, 1, 2, 4]:
-            if p != q:
-                q_moment = moments([min_x], n, q)
-                print(q, 'moment =', q_moment)
+        # # For each cluster with minimal p-moment report the q-moments for that cluster for q different than p.
+        # for q in [1/2, 1, 2, 4]:
+        #     if p != q:
+        #         q_moment = moments([min_x], n, q)
+        #         print(q, 'moment =', q_moment)
+
         # print(moms)
         # plt.hist(moms)
         # plt.xlabel('n = ' + str(n))
@@ -1328,7 +1338,14 @@ if __name__ == '__main__':
     #print(combos(list(range(12)),2))
 
     print("\nTesting moments:")
-    test_moments(4)
+    # test_moments(2)
+    # maybe_same1 = [-0.0, -0.0, -0.0, 1.0, -0.0, 0.0, 0.0, 0.5773502691896257, 0.816496580927726, -0.0, 0.5773502691896257, -0.816496580927726, -0.5, 0.8660254037844386, 0.0, 1.0, 1.7320508075688772, -0.0, 0.0, 1.7320508075688772, 0.0, 0.5, 1.4433756729740643, 0.816496580927726, 0.5, 1.4433756729740643, -0.816496580927726, 1.5, 0.8660254037844386, -0.0, 1.0, 0.5773502691896257, 0.816496580927726, 1.0, 0.5773502691896257, -0.816496580927726, 0.5, 0.8660254037844386, -0.0]
+    # maybe_same2 = [-0.0, 0.0, -0.0, 1.0, 0.0, -0.0, 0.5, 0.8660254037844386, -0.0, -0.5, 0.2886751345948129, 0.816496580927726, -0.0, -0.5773502691896257, 0.816496580927726, 1.0, 0.5773502691896257, 1.632993161855452, 1.5, 0.2886751345948129, 0.816496580927726, 0.0, 0.5773502691896257, 1.632993161855452, 1.0, 1.1547005383792515, 0.816496580927726, 0.5, -0.2886751345948129, 1.632993161855452, 1.0, -0.5773502691896257, 0.816496580927726, 0.0, 1.1547005383792515, 0.816496580927726, 0.5, 0.2886751345948129, 0.816496580927726]
+    maybe_same1 = [0.5000000000000006, -0.0962250448649387, 2.1773242158072694, 0.0, 0.0, 0.0, 0.9999999999999999, -1e-16, -1e-16, 0.4999999999999999, 0.866025403784439, 0.0, 1e-16, 1.1547005383792515, 0.8164965809277264, 1.0000000000000002, 1.1547005383792515, 0.8164965809277261, 0.5000000000000002, -0.6735753140545642, 0.5443310539518172, -0.4999999999999999, 0.2886751345948125, 0.8164965809277263, 1.5000000000000002, 0.2886751345948125, 0.816496580927726, 2e-16, -0.3849001794597515, 1.3608276348795436, 1.0000000000000004, -0.3849001794597515, 1.3608276348795434, 2e-16, 0.5773502691896253, 1.632993161855452, 1.0, 0.5773502691896251, 1.632993161855452, 0.5, 0.2886751345948125, 0.816496580927726]
+    maybe_same2 = [0.5000000000000003, 1.443375672974064, 1.6329931618554525, 0.0, 0.0, 0.0, 1.0, -1e-16, -2e-16, -1e-16, -0.5773502691896263, 0.8164965809277259, 1.0, -0.5773502691896263, 0.8164965809277257, 0.5000000000000001, 0.8660254037844387, 1e-16, -0.5, 0.2886751345948125, 0.8164965809277263, 1.5000000000000002, 0.2886751345948126, 0.8164965809277258, 0.5000000000000002, -0.2886751345948134, 1.632993161855452, 1e-16, 1.1547005383792515, 0.8164965809277264, 1.0000000000000002, 1.1547005383792515, 0.8164965809277261, 3e-16, 0.5773502691896253, 1.6329931618554523, 1.0000000000000004, 0.5773502691896253, 1.632993161855452, 0.5000000000000001, 0.2886751345948126, 0.8164965809277261]
+    graph(maybe_same1, maybe_same2, 'two n=14 clusters')
+    for p in [1/2, 1 , 3/2,  2 , 4 , 5.2, 100]:
+        print(p, 'moment =', moments([maybe_same1, maybe_same2], 14, p))
 
     # print("\nSemidefinite testing:")
     # pss1 = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
