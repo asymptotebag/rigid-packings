@@ -848,6 +848,44 @@ def graph(x1, x2, title='', dist = 'n/a'):
     ax.set_zlabel('z')
     plt.show()
 
+def graph_single(x, title):
+    '''
+    Graph single cluster (while graph() graphs 2 for comparison).
+    Add edges between contacting clusters using the adjacency matrix?
+    '''
+    d = 3
+    print('n =', len(x)//d)
+    A = adj_matrix(x, d, len(x)//d)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # PLOT THE POINTS
+    xs, ys, zs = [], [], []
+    for i in range(0,len(x),3):
+        xs.append(x[i])
+        ys.append(x[i+1])
+        zs.append(x[i+2])
+    ax.scatter(xs, ys, zs, c='red', s=32)
+
+    # PLOT THE CONTACTS
+    for i in range(len(A)):
+        for j in range(i+1, len(A[0])): 
+            if A[i][j] == 1:
+                # contact btwn spheres i and j
+                sph1 = x[3*i:3*i+3]
+                sph2 = x[3*j:3*j+3]
+                xs = [sph1[0], sph2[0]]
+                ys = [sph1[1], sph2[1]]
+                zs = [sph1[2], sph2[2]]
+                ax.plot(xs, ys, zs, c='lightcoral')
+
+    ax.set_title(title)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    plt.show()
+
 # TEST FUNCTIONS
 
 def parse_coords(n): #returns list of lists (of coordinates)
@@ -1033,6 +1071,22 @@ def test_numerical(start_n,end_n):
                 print("Length of estimated basis:", lenB)
                 print()
 
+def log_moments(clusters, n, p=2):
+    d = 3
+    moments = []
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+        moment = 0
+        for coord in coords:
+            moment += sum([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)])
+        moments.append(moment)
+    return moments
+
 def moments(clusters, n, p=2):
     d = 3
     moments = []
@@ -1079,6 +1133,28 @@ def min_moment(clusters, n, p=2):
     print("min moment cluster:", min_x, "moment =", min_mom)
     return min_x
 
+def min_log_moment(clusters, n, p=2):
+    d = 3
+    min_mom = 100
+    min_x = None
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+        moment = 0
+        for coord in coords:
+            # print([abs(coord[i] - center[i]) ** p for i in range(d)])
+            # print([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)])
+            moment += sum([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)]) # some are 0?
+        if moment < min_mom:
+            min_mom = moment
+            min_x = cluster
+    print("min log moment cluster:", min_x, "moment =", min_mom)
+    return min_x
+
 def max_contacts(n):
     clusters = parse_coords(n)
     max_conts = 0
@@ -1097,21 +1173,29 @@ def max_contacts(n):
             max_clusters.append(cluster)
     return max_clusters
 
-def test_moments(p=2): # p is the pth moment, default is 2nd
-    for n in range(9,10):
+def test_moments(p=2, start_n=6, end_n=14): # p is the pth moment, default is 2nd
+    for n in range(start_n, end_n + 1):
         print("\nn =", n)
         clusters = parse_coords(n)
         moms = moments(clusters, n, p)
         # print("avg =", sum(moms)/len(moms))
-        # min_mom = min(moms)
+        min_mom = min(moms)
         # print("min =", min_mom)
+
+        '''Histogram of moments'''
+        # plt.hist(moms)
+        # plt.xlabel('n = ' + str(n))
+        # plt.ylabel(str(p) + ' moment')
+        # plt.show()
+
+        '''# of clusters with almost minimal moment (near-optimizers)'''
         # almost_min = 0
         # for mom in moms:
-        #     if 0 < mom - min_mom < 0.01*min_mom:
-        #         #print("almost:", mom)
+        #     if 0 < mom - min_mom < 0.05*min_mom:
         #         almost_min += 1
         # print("# of almost min =", almost_min)
 
+        '''Moments of clusters with maximum contacts for given n'''
         # max_clusters = max_contacts(n)
         # for i, cluster in enumerate(max_clusters):
         #     print(i+1, ":", cluster)
@@ -1119,20 +1203,13 @@ def test_moments(p=2): # p is the pth moment, default is 2nd
         # print(max_moments)
         # print("avg of max moments =", sum(max_moments)/len(max_moments))
 
+        '''Trying different potential functions'''
         min_x = min_moment(clusters, n, p)
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        x1s, y1s, z1s = [], [], []
-        for i in range(0,len(min_x),3):
-            x1s.append(min_x[i])
-            y1s.append(min_x[i+1])
-            z1s.append(min_x[i+2])
-        ax.scatter(x1s, y1s, z1s, c='red')
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
-        plt.show()
-        # Number of contacts of clusters of minimal moment.
+        # min_log_x = min_log_moment(clusters, n, p)
+        
+        graph_single(min_x, "Minimum cluster for n = " + str(n) + " when p = " + str(p))
+        
+        '''Number of contacts of clusters of minimal moment.'''
         # R = rigidity_matrix(min_x, 3, n)
         # contacts = 0
         # for i in range(len(R[1])):
@@ -1141,17 +1218,14 @@ def test_moments(p=2): # p is the pth moment, default is 2nd
         #             contacts += 1
         # print("# contacts:", contacts)
 
-        # For each cluster with minimal p-moment report the q-moments for that cluster for q different than p.
-        for q in [1/2, 1, 2, 4]:
-            if p != q:
-                q_moment = moments([min_x], n, q)
-                print(q, 'moment =', q_moment)
+        '''For each cluster with minimal p-moment report the q-moments for that cluster for q different than p.'''
+        # for q in [1/2, 1, 2, 4]:
+        #     if p != q:
+        #         q_moment = moments([min_x], n, q)
+        #         print(q, 'moment =', q_moment)
 
-        # print(moms)
-        # plt.hist(moms)
-        # plt.xlabel('n = ' + str(n))
-        # plt.ylabel(str(p) + ' moment')
-        # plt.show()
+        # return almost_min/len(moms)
+
 
 def test_similar_moments():
     n = 14
@@ -1394,9 +1468,25 @@ if __name__ == '__main__':
     #print(combos(list(range(12)),2))
 
     print("\nTesting moments:")
-    test_moments(1)
-    test_moments(2)
-    test_moments(4)
+    for p in [0.5, 1, 2, 4]:
+        test_moments(p, 12, 12)
+
+    '''Plotting near-optimizers, n=10 through 14 
+    where the x-axis is p, and y-axis is the fraction of clusters which are within 5% of the optimal value'''
+
+    # for n in range(10,14):
+    #     ps = []
+    #     near_opts = []
+    #     for p in range(1,25):
+    #         ps.append(p/4)
+    #         near_opts.append(test_moments(p/4, n, n+1))
+    #     print(ps)
+    #     print(near_opts)
+    #     plt.plot(ps, near_opts)
+    #     plt.title('Near-optimizers vs. value of p for n = ' + str(n))
+    #     plt.xlabel('p')
+    #     plt.ylabel('Proportion within 5% optimal moment')
+    #     plt.show()
 
     # print("\nSemidefinite testing:")
     # pss1 = [1.0925925925925926, 1.6572091060072591, 0.1512030705421715, 1.0925925925925926, 0.6949586573578829, 1.5120307054217148, -0.0, -0.0, 0.0, 1.0, 0.0, -0.0, 0.5555555555555556, 1.2830005981991683, 0.9072184232530289, 0.5, 0.8660254037844386, 0.0, 0.5, 0.2886751345948129, 0.816496580927726, 1.3333333333333333, 0.769800358919501, 0.5443310539518174]
