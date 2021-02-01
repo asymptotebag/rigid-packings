@@ -968,6 +968,17 @@ def degree_count(x):
     sig_d = (sum([(d_i - d_avg)**2 for d_i in ds])/n) ** 0.5
     return (d_avg, sig_d)
 
+def distance_btwn(c1, c2):
+    d = 3
+    n = len(c1)//d
+    norm = 0
+    for i in range(n):
+        x = np.array(c1[d*i:d*i+d])
+        y = np.array(c2[d*i:d*i+d])
+        this_norm = np.linalg.norm(x-y)
+        norm += this_norm
+    return norm
+
 def test_moments(p=2, start_n=6, end_n=14): # p is the pth moment, default is 2nd
     for n in range(start_n, end_n + 1):
         print("\nn =", n)
@@ -1006,18 +1017,24 @@ def test_moments(p=2, start_n=6, end_n=14): # p is the pth moment, default is 2n
         d_avg, sig_d = degree_count(min_x)
         print("avg degree =", d_avg)
         print("stdev =", sig_d)
-        d_avgs, sigs = [], []
+        d_avgs, sigs, dists = [], [], []
         for x in almost_min_moment(clusters, min_mom, n, p, 0.05):
             d_avg, sig_d = degree_count(x)
             d_avgs.append(d_avg)
             sigs.append(sig_d)
+            dists.append(distance_btwn(x, min_x))
 
-        plt.hist(d_avgs)
-        plt.title("Histogram of average degree of near-optimizers for n = " + str(n) + " & p = " + str(p))
-        plt.show()
+        # plt.hist(d_avgs)
+        # plt.title("Histogram of average degree of near-optimizers for n = " + str(n) + " & p = " + str(p))
+        # plt.show()
 
-        plt.hist(sigs)
-        plt.title("Histogram of stdev of degree of near-optimizers for n = " + str(n) + " & p = " + str(p))
+        # plt.hist(sigs)
+        # plt.title("Histogram of stdev of degree of near-optimizers for n = " + str(n) + " & p = " + str(p))
+        # plt.show()
+
+        print("dist btwn min_x and min_x:", distance_btwn(min_x, min_x))
+        plt.hist(dists)
+        plt.title("Distances of near-optimizers from optimal cluster for n = " + str(n) + " & p = " + str(p))
         plt.show()
 
         # graph_cluster(min_x, "Minimum cluster for n = " + str(n) + " when p = " + str(p))
