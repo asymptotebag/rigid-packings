@@ -826,6 +826,264 @@ def manifold(x0, d, n, A, breaks, basis):
             # change implementation later
             return proj_final
 
+# MOMENTS EXPLORATION
+
+def log_moments(clusters, n, p=2):
+    d = 3
+    moments = []
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+        moment = 0
+        for coord in coords:
+            moment += sum([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)])
+        moments.append(moment)
+    return moments
+
+def min_log_moment(clusters, n, p=2):
+    d = 3
+    min_mom = 100
+    min_x = None
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+        moment = 0
+        for coord in coords:
+            # print([abs(coord[i] - center[i]) ** p for i in range(d)])
+            # print([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)])
+            moment += sum([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)]) # some are 0?
+        if moment < min_mom:
+            min_mom = moment
+            min_x = cluster
+    print("min log moment cluster:", min_x, "moment =", min_mom)
+    return min_x
+
+def moments(clusters, n, p=2):
+    d = 3
+    moments = []
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+        moment = 0
+        for coord in coords:
+            moment += sum([abs(coord[i] - center[i]) ** p for i in range(d)])
+        moments.append(moment)
+    return moments
+
+def min_moment(clusters, n, p=2):
+    '''
+    Return coordinates of cluster (min_x) with the smallest moment in the input list of clusters.
+    '''
+    d = 3
+    min_mom = 100
+    min_x = None
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+        moment = 0
+        for coord in coords:
+            moment += sum([abs(coord[i] - center[i]) ** p for i in range(d)])
+            #moment += (np.linalg.norm(np.array(coord) - np.array(center)) ** 2)
+        if moment < min_mom:
+            min_mom = moment
+            min_x = cluster
+        # if moment <= 13.71957671958:
+        #     R = rigidity_matrix(cluster, 3, n)
+        #     contacts = 0
+        #     for i in range(len(R[1])):
+        #         for j in range(i+1, len(R[1][0])):
+        #             if R[1][i][j] == 1:
+        #                 contacts += 1
+        #     print("# contacts of min:", contacts)
+        #     break
+    print("min moment cluster:", min_x, "moment =", min_mom)
+    return min_x
+
+def almost_min_moment(clusters, min_moment, n, p=2, threshold=0.005):
+    '''
+    Return a list of coordinates of the clusters with moments within threshold of the minimum moment.
+    '''
+    d = 3
+    almost_min = []
+    for cluster in clusters:
+        center = [0,0,0]
+        coords = [cluster[3*i:3*i+3] for i in range(n)]
+        for coord in coords: # e.g. [0,0,0]
+            center[0] += (1/n) * coord[0]
+            center[1] += (1/n) * coord[1]
+            center[2] += (1/n) * coord[2]
+        moment = 0
+        for coord in coords:
+            moment += sum([abs(coord[i] - center[i]) ** p for i in range(d)])
+
+        if 0 < moment - min_moment < threshold * min_moment:
+            almost_min.append(cluster)
+        
+    return almost_min
+
+def max_contacts(n):
+    clusters = parse_coords(n)
+    max_conts = 0
+    max_clusters = []
+    for cluster in clusters: #cluster is x
+        R = rigidity_matrix(cluster, 3, n)
+        contacts = 0
+        for i in range(len(R[1])):
+            for j in range(i+1, len(R[1][0])):
+                if R[1][i][j] == 1:
+                    contacts += 1
+        if contacts > max_conts:
+            max_conts = contacts
+            max_clusters = [cluster]
+        elif contacts == max_conts:
+            max_clusters.append(cluster)
+    return max_clusters
+
+def degree_count(x):
+    d = 3
+    n = len(x)//d
+    A = adj_matrix(x, d, len(x)//d)
+
+    ds = [sum([x for x in row]) for row in A]
+    # for row in A:
+    #     ds.append(sum([x for x in row]))
+
+    d_avg = sum(ds)/n
+    sig_d = (sum([(d_i - d_avg)**2 for d_i in ds])/n) ** 0.5
+    return (d_avg, sig_d)
+
+def test_moments(p=2, start_n=6, end_n=14): # p is the pth moment, default is 2nd
+    for n in range(start_n, end_n + 1):
+        print("\nn =", n)
+        clusters = parse_coords(n)
+        moms = moments(clusters, n, p)
+        # print("avg =", sum(moms)/len(moms))
+        min_mom = min(moms)
+        # print("min =", min_mom)
+
+        '''Histogram of moments'''
+        # plt.hist(moms)
+        # plt.xlabel('n = ' + str(n))
+        # plt.ylabel(str(p) + ' moment')
+        # plt.show()
+
+        '''# of clusters with almost minimal moment (near-optimizers)'''
+        # almost_min = 0
+        # for mom in moms:
+        #     if 0 < mom - min_mom < 0.05*min_mom:
+        #         almost_min += 1
+        # print("# of almost min =", almost_min)
+
+        '''Moments of clusters with maximum contacts for given n'''
+        # max_clusters = max_contacts(n)
+        # for i, cluster in enumerate(max_clusters):
+        #     print(i+1, ":", cluster)
+        # max_moments = moments(max_clusters, n, p)
+        # print(max_moments)
+        # print("avg of max moments =", sum(max_moments)/len(max_moments))
+
+        '''Trying different potential functions'''
+        min_x = min_moment(clusters, n, p)
+        # min_log_x = min_log_moment(clusters, n, p)
+        
+        '''Degree counts'''
+        d_avg, sig_d = degree_count(min_x)
+        print("avg degree =", d_avg)
+        print("stdev =", sig_d)
+        d_avgs, sigs = [], []
+        for x in almost_min_moment(clusters, min_mom, n, p, 0.05):
+            d_avg, sig_d = degree_count(x)
+            d_avgs.append(d_avg)
+            sigs.append(sig_d)
+
+        plt.hist(d_avgs)
+        plt.title("Histogram of average degree of near-optimizers for n = " + str(n) + " & p = " + str(p))
+        plt.show()
+
+        plt.hist(sigs)
+        plt.title("Histogram of stdev of degree of near-optimizers for n = " + str(n) + " & p = " + str(p))
+        plt.show()
+
+        # graph_cluster(min_x, "Minimum cluster for n = " + str(n) + " when p = " + str(p))
+        
+        '''Number of contacts of clusters of minimal moment.'''
+        # R = rigidity_matrix(min_x, 3, n)
+        # contacts = 0
+        # for i in range(len(R[1])):
+        #     for j in range(i+1, len(R[1][0])):
+        #         if R[1][i][j] == 1:
+        #             contacts += 1
+        # print("# contacts:", contacts)
+
+        '''For each cluster with minimal p-moment report the q-moments for that cluster for q different than p.'''
+        # for q in [1/2, 1, 2, 4]:
+        #     if p != q:
+        #         q_moment = moments([min_x], n, q)
+        #         print(q, 'moment =', q_moment)
+
+        # return almost_min/len(moms)
+
+def test_similar_moments():
+    n = 14
+    # maybe_same1 = [-0.0, -0.0, -0.0, 1.0, -0.0, 0.0, 0.0, 0.5773502691896257, 0.816496580927726, -0.0, 0.5773502691896257, -0.816496580927726, -0.5, 0.8660254037844386, 0.0, 1.0, 1.7320508075688772, -0.0, 0.0, 1.7320508075688772, 0.0, 0.5, 1.4433756729740643, 0.816496580927726, 0.5, 1.4433756729740643, -0.816496580927726, 1.5, 0.8660254037844386, -0.0, 1.0, 0.5773502691896257, 0.816496580927726, 1.0, 0.5773502691896257, -0.816496580927726, 0.5, 0.8660254037844386, -0.0]
+    # maybe_same2 = [-0.0, 0.0, -0.0, 1.0, 0.0, -0.0, 0.5, 0.8660254037844386, -0.0, -0.5, 0.2886751345948129, 0.816496580927726, -0.0, -0.5773502691896257, 0.816496580927726, 1.0, 0.5773502691896257, 1.632993161855452, 1.5, 0.2886751345948129, 0.816496580927726, 0.0, 0.5773502691896257, 1.632993161855452, 1.0, 1.1547005383792515, 0.816496580927726, 0.5, -0.2886751345948129, 1.632993161855452, 1.0, -0.5773502691896257, 0.816496580927726, 0.0, 1.1547005383792515, 0.816496580927726, 0.5, 0.2886751345948129, 0.816496580927726]
+    maybe_same1 = [0.5000000000000006, -0.0962250448649387, 2.1773242158072694, 0.0, 0.0, 0.0, 0.9999999999999999, -1e-16, -1e-16, 0.4999999999999999, 0.866025403784439, 0.0, 1e-16, 1.1547005383792515, 0.8164965809277264, 1.0000000000000002, 1.1547005383792515, 0.8164965809277261, 0.5000000000000002, -0.6735753140545642, 0.5443310539518172, -0.4999999999999999, 0.2886751345948125, 0.8164965809277263, 1.5000000000000002, 0.2886751345948125, 0.816496580927726, 2e-16, -0.3849001794597515, 1.3608276348795436, 1.0000000000000004, -0.3849001794597515, 1.3608276348795434, 2e-16, 0.5773502691896253, 1.632993161855452, 1.0, 0.5773502691896251, 1.632993161855452, 0.5, 0.2886751345948125, 0.816496580927726]
+    maybe_same2 = [0.5000000000000003, 1.443375672974064, 1.6329931618554525, 0.0, 0.0, 0.0, 1.0, -1e-16, -2e-16, -1e-16, -0.5773502691896263, 0.8164965809277259, 1.0, -0.5773502691896263, 0.8164965809277257, 0.5000000000000001, 0.8660254037844387, 1e-16, -0.5, 0.2886751345948125, 0.8164965809277263, 1.5000000000000002, 0.2886751345948126, 0.8164965809277258, 0.5000000000000002, -0.2886751345948134, 1.632993161855452, 1e-16, 1.1547005383792515, 0.8164965809277264, 1.0000000000000002, 1.1547005383792515, 0.8164965809277261, 3e-16, 0.5773502691896253, 1.6329931618554523, 1.0000000000000004, 0.5773502691896253, 1.632993161855452, 0.5000000000000001, 0.2886751345948126, 0.8164965809277261]
+    A1 = adj_matrix(maybe_same1, 3, n)
+    A2 = adj_matrix(maybe_same2, 3, n)
+    dict1 = adj_matrix_to_dict(A1)
+    dict2 = adj_matrix_to_dict(A2)
+    G1 = pynauty.Graph(n, False, dict1)
+    G2 = pynauty.Graph(n, False, dict2)
+    print("isomorphic?:", pynauty.isomorphic(G1, G2))
+    # graph(maybe_same1, maybe_same2, 'two n=13 clusters')
+    # for p in [1/2, 1 , 3/2,  2 , 4 , 5.2, 100]:
+    #     print(p, 'moment =', moments([maybe_same1, maybe_same2], n, p))
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    x1s, y1s, z1s = [], [], []
+    for i in range(0,len(maybe_same1),3):
+        x1s.append(maybe_same1[i])
+        y1s.append(maybe_same1[i+1])
+        z1s.append(maybe_same1[i+2])
+    ax.scatter(x1s, y1s, z1s, c='red')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    plt.show()
+    plt.clf()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    x1s, y1s, z1s = [], [], []
+    for i in range(0,len(maybe_same2),3):
+        x1s.append(maybe_same2[i])
+        y1s.append(maybe_same2[i+1])
+        z1s.append(maybe_same2[i+2])
+    ax.scatter(x1s, y1s, z1s, c='blue')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    plt.show()
+
+
+# HELPER METHODS
+
 def graph(x1, x2, title='', dist = 'n/a'):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -848,13 +1106,13 @@ def graph(x1, x2, title='', dist = 'n/a'):
     ax.set_zlabel('z')
     plt.show()
 
-def graph_single(x, title):
+def graph_cluster(x, title):
     '''
     Graph single cluster (while graph() graphs 2 for comparison).
     Add edges between contacting clusters using the adjacency matrix?
     '''
     d = 3
-    print('n =', len(x)//d)
+    n = len(x)//d
     A = adj_matrix(x, d, len(x)//d)
 
     fig = plt.figure()
@@ -868,22 +1126,37 @@ def graph_single(x, title):
         zs.append(x[i+2])
     ax.scatter(xs, ys, zs, c='red', s=32)
 
-    # PLOT THE CONTACTS
+    avg_x = sum(xs)/len(xs)
+    avg_y = sum(ys)/len(ys)
+    avg_z = sum(zs)/len(zs)
+
+    # PLOT THE CONTACTS - if n = 13 don't draw connections to middle sphere
+    contacts = 0
+    skipped = 0
     for i in range(len(A)):
         for j in range(i+1, len(A[0])): 
             if A[i][j] == 1:
+                contacts += 1
                 # contact btwn spheres i and j
                 sph1 = x[3*i:3*i+3]
                 sph2 = x[3*j:3*j+3]
-                xs = [sph1[0], sph2[0]]
-                ys = [sph1[1], sph2[1]]
-                zs = [sph1[2], sph2[2]]
-                ax.plot(xs, ys, zs, c='lightcoral')
+                # if n!=13 or not((0.95*avg_x < sph1[0] < 1.05*avg_x and 0.95*avg_y < sph1[1] < 1.05*avg_y and 0.95*avg_z < sph1[2] < 1.05*avg_z) or (0.95*avg_x < sph2[0] < 1.05*avg_x and 0.95*avg_y < sph2[1] < 1.05*avg_y and 0.95*avg_z < sph2[2] < 1.05*avg_z)):
+                if n!=13 or not(i==12 or j==12):
+                    xs = [sph1[0], sph2[0]]
+                    ys = [sph1[1], sph2[1]]
+                    zs = [sph1[2], sph2[2]]
+                    ax.plot(xs, ys, zs, c='lightcoral')
+                else:
+                    skipped += 1
+    print(skipped, "skipped edges")
+    adj_dict = adj_matrix_to_dict(A)
+    #print("adjacency dict:\n", adj_dict)
 
-    ax.set_title(title)
+    ax.set_title(title + " (" + str(contacts) + " contacts)")
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('z')
+    # ax.grid(False)
     plt.show()
 
 # TEST FUNCTIONS
@@ -1070,204 +1343,6 @@ def test_numerical(start_n,end_n):
                 lenB = numerical_dim(cluster,d,n,RA[1],rigid[1])
                 print("Length of estimated basis:", lenB)
                 print()
-
-def log_moments(clusters, n, p=2):
-    d = 3
-    moments = []
-    for cluster in clusters:
-        center = [0,0,0]
-        coords = [cluster[3*i:3*i+3] for i in range(n)]
-        for coord in coords: # e.g. [0,0,0]
-            center[0] += (1/n) * coord[0]
-            center[1] += (1/n) * coord[1]
-            center[2] += (1/n) * coord[2]
-        moment = 0
-        for coord in coords:
-            moment += sum([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)])
-        moments.append(moment)
-    return moments
-
-def moments(clusters, n, p=2):
-    d = 3
-    moments = []
-    for cluster in clusters:
-        center = [0,0,0]
-        coords = [cluster[3*i:3*i+3] for i in range(n)]
-        for coord in coords: # e.g. [0,0,0]
-            center[0] += (1/n) * coord[0]
-            center[1] += (1/n) * coord[1]
-            center[2] += (1/n) * coord[2]
-        moment = 0
-        for coord in coords:
-            moment += sum([abs(coord[i] - center[i]) ** p for i in range(d)])
-        moments.append(moment)
-    return moments
-
-def min_moment(clusters, n, p=2):
-    d = 3
-    min_mom = 100
-    min_x = None
-    for cluster in clusters:
-        center = [0,0,0]
-        coords = [cluster[3*i:3*i+3] for i in range(n)]
-        for coord in coords: # e.g. [0,0,0]
-            center[0] += (1/n) * coord[0]
-            center[1] += (1/n) * coord[1]
-            center[2] += (1/n) * coord[2]
-        moment = 0
-        for coord in coords:
-            moment += sum([abs(coord[i] - center[i]) ** p for i in range(d)])
-            #moment += (np.linalg.norm(np.array(coord) - np.array(center)) ** 2)
-        if moment < min_mom:
-            min_mom = moment
-            min_x = cluster
-        # if moment <= 13.71957671958:
-        #     R = rigidity_matrix(cluster, 3, n)
-        #     contacts = 0
-        #     for i in range(len(R[1])):
-        #         for j in range(i+1, len(R[1][0])):
-        #             if R[1][i][j] == 1:
-        #                 contacts += 1
-        #     print("# contacts of min:", contacts)
-        #     break
-    print("min moment cluster:", min_x, "moment =", min_mom)
-    return min_x
-
-def min_log_moment(clusters, n, p=2):
-    d = 3
-    min_mom = 100
-    min_x = None
-    for cluster in clusters:
-        center = [0,0,0]
-        coords = [cluster[3*i:3*i+3] for i in range(n)]
-        for coord in coords: # e.g. [0,0,0]
-            center[0] += (1/n) * coord[0]
-            center[1] += (1/n) * coord[1]
-            center[2] += (1/n) * coord[2]
-        moment = 0
-        for coord in coords:
-            # print([abs(coord[i] - center[i]) ** p for i in range(d)])
-            # print([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)])
-            moment += sum([math.log(1 + abs(coord[i] - center[i]) ** p) for i in range(d)]) # some are 0?
-        if moment < min_mom:
-            min_mom = moment
-            min_x = cluster
-    print("min log moment cluster:", min_x, "moment =", min_mom)
-    return min_x
-
-def max_contacts(n):
-    clusters = parse_coords(n)
-    max_conts = 0
-    max_clusters = []
-    for cluster in clusters: #cluster is x
-        R = rigidity_matrix(cluster, 3, n)
-        contacts = 0
-        for i in range(len(R[1])):
-            for j in range(i+1, len(R[1][0])):
-                if R[1][i][j] == 1:
-                    contacts += 1
-        if contacts > max_conts:
-            max_conts = contacts
-            max_clusters = [cluster]
-        elif contacts == max_conts:
-            max_clusters.append(cluster)
-    return max_clusters
-
-def test_moments(p=2, start_n=6, end_n=14): # p is the pth moment, default is 2nd
-    for n in range(start_n, end_n + 1):
-        print("\nn =", n)
-        clusters = parse_coords(n)
-        moms = moments(clusters, n, p)
-        # print("avg =", sum(moms)/len(moms))
-        min_mom = min(moms)
-        # print("min =", min_mom)
-
-        '''Histogram of moments'''
-        # plt.hist(moms)
-        # plt.xlabel('n = ' + str(n))
-        # plt.ylabel(str(p) + ' moment')
-        # plt.show()
-
-        '''# of clusters with almost minimal moment (near-optimizers)'''
-        # almost_min = 0
-        # for mom in moms:
-        #     if 0 < mom - min_mom < 0.05*min_mom:
-        #         almost_min += 1
-        # print("# of almost min =", almost_min)
-
-        '''Moments of clusters with maximum contacts for given n'''
-        # max_clusters = max_contacts(n)
-        # for i, cluster in enumerate(max_clusters):
-        #     print(i+1, ":", cluster)
-        # max_moments = moments(max_clusters, n, p)
-        # print(max_moments)
-        # print("avg of max moments =", sum(max_moments)/len(max_moments))
-
-        '''Trying different potential functions'''
-        min_x = min_moment(clusters, n, p)
-        # min_log_x = min_log_moment(clusters, n, p)
-        
-        graph_single(min_x, "Minimum cluster for n = " + str(n) + " when p = " + str(p))
-        
-        '''Number of contacts of clusters of minimal moment.'''
-        # R = rigidity_matrix(min_x, 3, n)
-        # contacts = 0
-        # for i in range(len(R[1])):
-        #     for j in range(i+1, len(R[1][0])):
-        #         if R[1][i][j] == 1:
-        #             contacts += 1
-        # print("# contacts:", contacts)
-
-        '''For each cluster with minimal p-moment report the q-moments for that cluster for q different than p.'''
-        # for q in [1/2, 1, 2, 4]:
-        #     if p != q:
-        #         q_moment = moments([min_x], n, q)
-        #         print(q, 'moment =', q_moment)
-
-        # return almost_min/len(moms)
-
-
-def test_similar_moments():
-    n = 14
-    # maybe_same1 = [-0.0, -0.0, -0.0, 1.0, -0.0, 0.0, 0.0, 0.5773502691896257, 0.816496580927726, -0.0, 0.5773502691896257, -0.816496580927726, -0.5, 0.8660254037844386, 0.0, 1.0, 1.7320508075688772, -0.0, 0.0, 1.7320508075688772, 0.0, 0.5, 1.4433756729740643, 0.816496580927726, 0.5, 1.4433756729740643, -0.816496580927726, 1.5, 0.8660254037844386, -0.0, 1.0, 0.5773502691896257, 0.816496580927726, 1.0, 0.5773502691896257, -0.816496580927726, 0.5, 0.8660254037844386, -0.0]
-    # maybe_same2 = [-0.0, 0.0, -0.0, 1.0, 0.0, -0.0, 0.5, 0.8660254037844386, -0.0, -0.5, 0.2886751345948129, 0.816496580927726, -0.0, -0.5773502691896257, 0.816496580927726, 1.0, 0.5773502691896257, 1.632993161855452, 1.5, 0.2886751345948129, 0.816496580927726, 0.0, 0.5773502691896257, 1.632993161855452, 1.0, 1.1547005383792515, 0.816496580927726, 0.5, -0.2886751345948129, 1.632993161855452, 1.0, -0.5773502691896257, 0.816496580927726, 0.0, 1.1547005383792515, 0.816496580927726, 0.5, 0.2886751345948129, 0.816496580927726]
-    maybe_same1 = [0.5000000000000006, -0.0962250448649387, 2.1773242158072694, 0.0, 0.0, 0.0, 0.9999999999999999, -1e-16, -1e-16, 0.4999999999999999, 0.866025403784439, 0.0, 1e-16, 1.1547005383792515, 0.8164965809277264, 1.0000000000000002, 1.1547005383792515, 0.8164965809277261, 0.5000000000000002, -0.6735753140545642, 0.5443310539518172, -0.4999999999999999, 0.2886751345948125, 0.8164965809277263, 1.5000000000000002, 0.2886751345948125, 0.816496580927726, 2e-16, -0.3849001794597515, 1.3608276348795436, 1.0000000000000004, -0.3849001794597515, 1.3608276348795434, 2e-16, 0.5773502691896253, 1.632993161855452, 1.0, 0.5773502691896251, 1.632993161855452, 0.5, 0.2886751345948125, 0.816496580927726]
-    maybe_same2 = [0.5000000000000003, 1.443375672974064, 1.6329931618554525, 0.0, 0.0, 0.0, 1.0, -1e-16, -2e-16, -1e-16, -0.5773502691896263, 0.8164965809277259, 1.0, -0.5773502691896263, 0.8164965809277257, 0.5000000000000001, 0.8660254037844387, 1e-16, -0.5, 0.2886751345948125, 0.8164965809277263, 1.5000000000000002, 0.2886751345948126, 0.8164965809277258, 0.5000000000000002, -0.2886751345948134, 1.632993161855452, 1e-16, 1.1547005383792515, 0.8164965809277264, 1.0000000000000002, 1.1547005383792515, 0.8164965809277261, 3e-16, 0.5773502691896253, 1.6329931618554523, 1.0000000000000004, 0.5773502691896253, 1.632993161855452, 0.5000000000000001, 0.2886751345948126, 0.8164965809277261]
-    A1 = adj_matrix(maybe_same1, 3, n)
-    A2 = adj_matrix(maybe_same2, 3, n)
-    dict1 = adj_matrix_to_dict(A1)
-    dict2 = adj_matrix_to_dict(A2)
-    G1 = pynauty.Graph(n, False, dict1)
-    G2 = pynauty.Graph(n, False, dict2)
-    print("isomorphic?:", pynauty.isomorphic(G1, G2))
-    # graph(maybe_same1, maybe_same2, 'two n=13 clusters')
-    # for p in [1/2, 1 , 3/2,  2 , 4 , 5.2, 100]:
-    #     print(p, 'moment =', moments([maybe_same1, maybe_same2], n, p))
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    x1s, y1s, z1s = [], [], []
-    for i in range(0,len(maybe_same1),3):
-        x1s.append(maybe_same1[i])
-        y1s.append(maybe_same1[i+1])
-        z1s.append(maybe_same1[i+2])
-    ax.scatter(x1s, y1s, z1s, c='red')
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('z')
-    plt.show()
-    plt.clf()
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    x1s, y1s, z1s = [], [], []
-    for i in range(0,len(maybe_same2),3):
-        x1s.append(maybe_same2[i])
-        y1s.append(maybe_same2[i+1])
-        z1s.append(maybe_same2[i+2])
-    ax.scatter(x1s, y1s, z1s, c='blue')
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('z')
-    plt.show()
 
 def test_manifold(n):
     n = 6
@@ -1469,7 +1544,8 @@ if __name__ == '__main__':
 
     print("\nTesting moments:")
     for p in [0.5, 1, 2, 4]:
-        test_moments(p, 12, 12)
+        print("p =", p)
+        test_moments(p, 13, 13)
 
     '''Plotting near-optimizers, n=10 through 14 
     where the x-axis is p, and y-axis is the fraction of clusters which are within 5% of the optimal value'''
