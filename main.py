@@ -961,9 +961,6 @@ def degree_count(x):
     A = adj_matrix(x, d, len(x)//d)
 
     ds = [sum([x for x in row]) for row in A]
-    # for row in A:
-    #     ds.append(sum([x for x in row]))
-
     d_avg = sum(ds)/n
     sig_d = (sum([(d_i - d_avg)**2 for d_i in ds])/n) ** 0.5
     return (d_avg, sig_d)
@@ -1018,11 +1015,13 @@ def test_moments(p=2, start_n=6, end_n=14): # p is the pth moment, default is 2n
         print("avg degree =", d_avg)
         print("stdev =", sig_d)
         d_avgs, sigs, dists = [], [], []
+        diffs = []
         for x in almost_min_moment(clusters, min_mom, n, p, 0.05):
             d_avg, sig_d = degree_count(x)
             d_avgs.append(d_avg)
             sigs.append(sig_d)
             dists.append(distance_btwn(x, min_x))
+            diffs.append(moments([x],n,p)[0] - moments([min_x],n,p)[0])
 
         # plt.hist(d_avgs)
         # plt.title("Histogram of average degree of near-optimizers for n = " + str(n) + " & p = " + str(p))
@@ -1032,9 +1031,13 @@ def test_moments(p=2, start_n=6, end_n=14): # p is the pth moment, default is 2n
         # plt.title("Histogram of stdev of degree of near-optimizers for n = " + str(n) + " & p = " + str(p))
         # plt.show()
 
-        print("dist btwn min_x and min_x:", distance_btwn(min_x, min_x))
-        plt.hist(dists)
-        plt.title("Distances of near-optimizers from optimal cluster for n = " + str(n) + " & p = " + str(p))
+        # print("dist btwn min_x and min_x:", distance_btwn(min_x, min_x))
+        # plt.hist(dists)
+        # plt.title("Distances of near-optimizers from optimal cluster for n = " + str(n) + " & p = " + str(p))
+        # plt.show()
+
+        plt.hist(diffs)
+        plt.title("Difference in moment btwn near-optimals and optimal; n = " + str(n) + " & p = " + str(p))
         plt.show()
 
         # graph_cluster(min_x, "Minimum cluster for n = " + str(n) + " when p = " + str(p))
@@ -1166,8 +1169,8 @@ def graph_cluster(x, title):
                 else:
                     skipped += 1
     print(skipped, "skipped edges")
-    adj_dict = adj_matrix_to_dict(A)
-    #print("adjacency dict:\n", adj_dict)
+    # adj_dict = adj_matrix_to_dict(A)
+    # print("adjacency dict:\n", adj_dict)
 
     ax.set_title(title + " (" + str(contacts) + " contacts)")
     ax.set_xlabel('x')
